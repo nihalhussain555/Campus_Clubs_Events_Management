@@ -1,0 +1,150 @@
+[{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840420"
+  },
+  "clubName": "Tech Club",
+  "description": "A club for technology enthusiasts, coding, web development, and AI/ML discussions.",
+  "members": [],
+  "admin": {
+    "$oid": "69836cab0da232f3e5ec2732"
+  },
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.611Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840421"
+  },
+  "clubName": "Coding Wizards",
+  "description": "Learn programming languages including Python, JavaScript, C++, and Java.",
+  "members": [],
+  "admin": {
+    "$oid": "69836cab0da232f3e5ec2732"
+  },
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.614Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840422"
+  },
+  "clubName": "Design Club",
+  "description": "Explore UI/UX design, graphic design, and digital art.",
+  "members": [],
+  "admin": {
+    "$oid": "69836cab0da232f3e5ec2732"
+  },
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.614Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840425"
+  },
+  "clubName": "Web Development Club",
+  "description": "Full-stack web development including frontend, backend, and databases.",
+  "members": [],
+  "admin": {
+    "$oid": "69836cab0da232f3e5ec2732"
+  },
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.615Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840426"
+  },
+  "clubName": "Cloud Computing Club",
+  "description": "AWS, Google Cloud, Azure, and serverless architecture.",
+  "members": [],
+  "admin": {
+    "$oid": "69836cab0da232f3e5ec2732"
+  },
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.616Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840427"
+  },
+  "clubName": "Cybersecurity Club",
+  "description": "Network security, cryptography, penetration testing, and ethical hacking.",
+  "members": [],
+  "admin": {
+    "$oid": "69836cab0da232f3e5ec2732"
+  },
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.616Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840428"
+  },
+  "clubName": "Gaming Dev Club",
+  "description": "Game development using Unity, Unreal Engine, and Godot.",
+  "members": [],
+  "admin": {
+    "$oid": "69836cab0da232f3e5ec2732"
+  },
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.616Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840429"
+  },
+  "clubName": "AI & Machine Learning",
+  "description": "Artificial intelligence, neural networks, deep learning, and NLP.",
+  "members": [],
+  "admin": {
+    "$oid": "69836cab0da232f3e5ec2732"
+  },
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.616Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840423"
+  },
+  "clubName": "Data Science Club",
+  "description": "Machine learning, data analysis, statistics, and big data technologies.",
+  "members": [],
+  "admin": {
+    "$oid": "69836cab0da232f3e5ec2732"
+  },
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.615Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840424"
+  },
+  "clubName": "Mobile App Developers",
+  "description": "Development of iOS and Android applications using React Native and Flutter.",
+  "members": [],
+  "admin": {
+    "$oid": "69836cab0da232f3e5ec2732"
+  },
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.615Z"
+  },
+  "__v": 0
+}]

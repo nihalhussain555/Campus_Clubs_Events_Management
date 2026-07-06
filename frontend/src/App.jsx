@@ -1,0 +1,60 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import ProtectedRoute from './components/ProtectedRoute';
+import Register from './pages/Register';
+import Login from './pages/Login';
+import Clubs from './pages/Clubs';
+import Events from './pages/Events';
+import AdminPanel from './pages/AdminPanel';
+import Profile from './pages/Profile';
+import Home from './pages/Home';
+import About from './pages/About';
+import Contact from './pages/Contact';
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={<Home />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+
+        {/* Protected Routes */}
+
+
+        <Route path="/clubs" element={
+          <ProtectedRoute>
+            <Clubs />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/events" element={
+          <ProtectedRoute>
+            <Events />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/profile" element={
+          <ProtectedRoute>
+            <Profile />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/admin" element={
+          <ProtectedRoute requiredRole="admin">
+            <AdminPanel />
+          </ProtectedRoute>
+        } />
+
+        {/* Default Route */}
+        <Route path="/" element={<Navigate to="/profile" replace />} />
+        <Route path="*" element={<Navigate to="/profile" replace />} />
+      </Routes>
+    </Router>
+  );
+}
+
+export default App;

@@ -1,0 +1,12 @@
+.env
+.env.local
+.env.*.local
+node_modules/
+dist/
+.DS_Store
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

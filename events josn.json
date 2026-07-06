@@ -1,0 +1,428 @@
+[{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840434"
+  },
+  "title": "Web Development Workshop",
+  "description": "Learn modern web development with React, Node.js, and MongoDB. Build a full-stack application from scratch.",
+  "date": {
+    "$date": "2026-04-28T15:11:37.641Z"
+  },
+  "location": "Main Auditorium",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840421"
+  },
+  "registeredStudents": [],
+  "capacity": 50,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.641Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840435"
+  },
+  "title": "Python Bootcamp",
+  "description": "Intensive Python programming course covering basics to advanced concepts.",
+  "date": {
+    "$date": "2026-05-05T15:11:37.641Z"
+  },
+  "location": "Computer Lab A",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840421"
+  },
+  "registeredStudents": [],
+  "capacity": 40,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.642Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840436"
+  },
+  "title": "UI/UX Design Masterclass",
+  "description": "Learn design principles, wireframing, prototyping, and user research.",
+  "date": {
+    "$date": "2026-05-01T15:11:37.641Z"
+  },
+  "location": "Design Studio",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840422"
+  },
+  "registeredStudents": [],
+  "capacity": 35,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.642Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840437"
+  },
+  "title": "Machine Learning Fundamentals",
+  "description": "Introduction to ML algorithms, supervised learning, and neural networks.",
+  "date": {
+    "$date": "2026-05-12T15:11:37.641Z"
+  },
+  "location": "Science Building Room 301",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840423"
+  },
+  "registeredStudents": [],
+  "capacity": 45,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.642Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840438"
+  },
+  "title": "React.js Deep Dive",
+  "description": "Advanced React concepts including hooks, context API, and state management.",
+  "date": {
+    "$date": "2026-04-26T15:11:37.641Z"
+  },
+  "location": "Tech Hub Room 2",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840420"
+  },
+  "registeredStudents": [],
+  "capacity": 60,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.642Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea84043b"
+  },
+  "title": "Cybersecurity Essentials",
+  "description": "Network security, firewalls, encryption, and secure coding practices.",
+  "date": {
+    "$date": "2026-05-03T15:11:37.641Z"
+  },
+  "location": "Security Center",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840427"
+  },
+  "registeredStudents": [],
+  "capacity": 45,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.643Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea84043c"
+  },
+  "title": "Game Development with Unity",
+  "description": "Create 3D games using Unity engine and C# programming.",
+  "date": {
+    "$date": "2026-06-02T15:11:37.641Z"
+  },
+  "location": "Game Dev Studio",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840428"
+  },
+  "registeredStudents": [],
+  "capacity": 35,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.643Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea84043d"
+  },
+  "title": "Deep Learning & Neural Networks",
+  "description": "Advanced deep learning techniques including CNNs, RNNs, and transformers.",
+  "date": {
+    "$date": "2026-06-09T15:11:37.641Z"
+  },
+  "location": "AI Lab",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840429"
+  },
+  "registeredStudents": [],
+  "capacity": 40,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.643Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea84043e"
+  },
+  "title": "Database Design & SQL",
+  "description": "Master relational databases, SQL queries, and database optimization.",
+  "date": {
+    "$date": "2026-04-30T15:11:37.641Z"
+  },
+  "location": "Data Center Room 5",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840425"
+  },
+  "registeredStudents": [],
+  "capacity": 55,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.643Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea84043f"
+  },
+  "title": "Graphic Design Fundamentals",
+  "description": "Color theory, typography, composition, and design tools (Adobe Creative Suite).",
+  "date": {
+    "$date": "2026-05-07T15:11:37.641Z"
+  },
+  "location": "Design Studio B",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840422"
+  },
+  "registeredStudents": [],
+  "capacity": 30,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.643Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840440"
+  },
+  "title": "Data Analysis with Python & Pandas",
+  "description": "Analyze large datasets using Python, Pandas, and data visualization libraries.",
+  "date": {
+    "$date": "2026-05-15T15:11:37.641Z"
+  },
+  "location": "Analytics Lab",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840423"
+  },
+  "registeredStudents": [],
+  "capacity": 50,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.644Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840441"
+  },
+  "title": "JavaScript Advanced Topics",
+  "description": "Closures, async/await, promises, event loop, and functional programming.",
+  "date": {
+    "$date": "2026-05-11T15:11:37.641Z"
+  },
+  "location": "Programming Lab",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840421"
+  },
+  "registeredStudents": [],
+  "capacity": 55,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.644Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840442"
+  },
+  "title": "DevOps & Docker",
+  "description": "Containerization with Docker, Kubernetes, and CI/CD pipelines.",
+  "date": {
+    "$date": "2026-05-22T15:11:37.641Z"
+  },
+  "location": "DevOps Center",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840426"
+  },
+  "registeredStudents": [],
+  "capacity": 45,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.644Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840443"
+  },
+  "title": "Ethical Hacking Workshop",
+  "description": "Penetration testing, vulnerability assessment, and security auditing.",
+  "date": {
+    "$date": "2026-05-29T15:11:37.641Z"
+  },
+  "location": "Security Lab",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840427"
+  },
+  "registeredStudents": [],
+  "capacity": 35,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.644Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840444"
+  },
+  "title": "Unreal Engine Game Development",
+  "description": "Create high-quality 3D games using Unreal Engine and C++.",
+  "date": {
+    "$date": "2026-06-05T15:11:37.641Z"
+  },
+  "location": "Game Studio",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840428"
+  },
+  "registeredStudents": [],
+  "capacity": 30,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.645Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840445"
+  },
+  "title": "NLP & Text Processing",
+  "description": "Natural Language Processing, text mining, and sentiment analysis.",
+  "date": {
+    "$date": "2026-06-12T15:11:37.641Z"
+  },
+  "location": "AI Lab Room 2",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840429"
+  },
+  "registeredStudents": [],
+  "capacity": 40,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.645Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840446"
+  },
+  "title": "Tech Meetup & Networking",
+  "description": "Meet industry professionals, share ideas, and build connections.",
+  "date": {
+    "$date": "2026-05-21T15:11:37.641Z"
+  },
+  "location": "Main Hall",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840420"
+  },
+  "registeredStudents": [],
+  "capacity": 100,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.646Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840447"
+  },
+  "title": "Startup Ideas Pitching",
+  "description": "Share your startup ideas and get feedback from mentors and investors.",
+  "date": {
+    "$date": "2026-05-31T15:11:37.641Z"
+  },
+  "location": "Innovation Center",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840420"
+  },
+  "registeredStudents": [
+    {
+      "$oid": "6a4b3e07b7b2c994faf24b9d"
+    }
+  ],
+  "capacity": 80,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.647Z"
+  },
+  "__v": 1
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea840439"
+  },
+  "title": "Mobile App Development with React Native",
+  "description": "Build cross-platform mobile applications using React Native.",
+  "date": {
+    "$date": "2026-05-19T15:11:37.641Z"
+  },
+  "location": "Innovation Center",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840424"
+  },
+  "registeredStudents": [],
+  "capacity": 40,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.643Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69e793a97a6dec0eea84043a"
+  },
+  "title": "AWS Cloud Architecture",
+  "description": "Design scalable cloud solutions using AWS services and best practices.",
+  "date": {
+    "$date": "2026-05-26T15:11:37.641Z"
+  },
+  "location": "Cloud Lab",
+  "club": {
+    "$oid": "69e793a97a6dec0eea840426"
+  },
+  "registeredStudents": [
+    {
+      "$oid": "6a4b3e07b7b2c994faf24b9d"
+    }
+  ],
+  "capacity": 50,
+  "status": "upcoming",
+  "createdAt": {
+    "$date": "2026-04-21T15:11:37.643Z"
+  },
+  "__v": 1
+}]
