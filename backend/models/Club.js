@@ -10,6 +10,11 @@ const clubSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Please provide a description']
   },
+  category: {
+    type: String,
+    default: 'General',
+    trim: true
+  },
   members: [
     {
       type: mongoose.Schema.Types.ObjectId,

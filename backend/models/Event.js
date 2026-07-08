@@ -18,6 +18,11 @@ const eventSchema = new mongoose.Schema({
     type: String,
     default: 'TBD'
   },
+  category: {
+    type: String,
+    default: 'General',
+    trim: true
+  },
   club: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Club',

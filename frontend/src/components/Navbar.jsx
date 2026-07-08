@@ -1,108 +1,195 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Menu, X, LogOut, User as UserIcon } from 'lucide-react';
+import { ChevronDown, Compass, LayoutDashboard, LogOut, Menu, User, X } from 'lucide-react';
 import api from '../services/api';
-import { useScrollSpy } from '../hooks/useScrollSpy';
-
-const sections = ['home', 'about', 'contact', 'clubs', 'events', 'profile']; // IDs of page sections
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const activeSection = useScrollSpy(sections);
+
+  useEffect(() => {
+    const onScroll = () => setIsScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener('scroll', onScroll);
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    delete api.defaults.headers.common['Authorization'];
+    delete api.defaults.headers.common.Authorization;
+    setIsOpen(false);
+    setProfileOpen(false);
     navigate('/login');
   };
 
-  const toggleDropdown = () => setDropdownOpen(!dropdownOpen);
+  const closeMenu = () => {
+    setIsOpen(false);
+    setProfileOpen(false);
+  };
 
-  const linkClass = (section) =>
-    `hover:bg-blue-700 px-3 py-2 rounded ${activeSection === section ? 'bg-blue-800' : ''}`;
+  const navLinkClass = ({ isActive }) =>
+    `rounded-full px-4 py-2 text-sm font-bold transition ${
+      isActive
+        ? 'bg-black text-white'
+        : 'text-slate-700 hover:bg-slate-100 hover:text-black'
+    }`;
+
+  const links = [
+    { to: '/', label: 'Home' },
+    { to: '/about', label: 'About' },
+    { to: '/contact', label: 'Contact' },
+    ...(user?.name
+      ? [
+          { to: '/clubs', label: 'Clubs' },
+          { to: '/events', label: 'Events' },
+          ...(user?.role === 'admin' ? [{ to: '/admin', label: 'Admin' }] : []),
+        ]
+      : []),
+  ];
 
   return (
-    <nav className="bg-blue-600 text-white shadow-lg fixed w-full z-10 glass p-2 md:p-4 lg:p-6">
-      <div className="max-w-7xl mx-auto px-4 flex justify-between items-center h-16">
-        <div className="font-bold text-xl cursor-pointer" onClick={() => navigate('/')}>🎓 Campus Clubs</div>
-        {/* Desktop menu */}
-        <div className="hidden md:flex items-center space-x-6">
-          <NavLink to="/" className={linkClass('home')}>Home</NavLink>
-          <NavLink to="/about" className={linkClass('about')}>About</NavLink>
-          <NavLink to="/contact" className={linkClass('contact')}>Contact</NavLink>
-          {user?.name && (
-            <>
-              <NavLink to="/clubs" className={linkClass('clubs')}>Clubs</NavLink>
-              <NavLink to="/events" className={linkClass('events')}>Events</NavLink>
-              {user?.role === 'admin' && (
-                <NavLink to="/admin" className={linkClass('admin')}>Admin Panel</NavLink>
-              )}
-            </>
-          )}
+    <header
+      className={`fixed left-0 right-0 top-0 z-40 border-b transition duration-300 ${
+        isScrolled
+          ? 'border-slate-200 bg-white/92 shadow-[0_16px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl'
+          : 'border-transparent bg-white/78 backdrop-blur-xl'
+      }`}
+    >
+      <div className="page-container flex h-20 items-center justify-between">
+        <button
+          type="button"
+          onClick={() => {
+            closeMenu();
+            navigate('/');
+          }}
+          className="flex items-center gap-3 rounded-full pr-3 text-left"
+          aria-label="Go to home"
+        >
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#145f82] text-white">
+            <Compass size={20} />
+          </span>
+          <span className="text-lg font-black tracking-normal text-[#073c57]">Campus Clubs</span>
+        </button>
+
+        <nav className="hidden items-center gap-1 md:flex">
+          {links.map((link) => (
+            <NavLink key={link.to} to={link.to} className={navLinkClass}>
+              {link.label}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="hidden items-center gap-3 md:flex">
           {user?.name ? (
-            <div className="relative inline-block text-left">
-              <button onClick={toggleDropdown} className="flex items-center gap-2 hover:bg-blue-700 px-3 py-2 rounded">
-                <UserIcon size={18} />
-                <span>{user.name.split(' ')[0]}</span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setProfileOpen((open) => !open)}
+                className="flex items-center gap-2 rounded-full border border-[#bcddeb] bg-white px-3 py-2 text-sm font-bold text-[#145f82] shadow-sm hover:bg-[#e8f5fb]"
+                aria-expanded={profileOpen}
+              >
+                <User size={16} />
+                <span className="max-w-28 truncate">{user.name.split(' ')[0]}</span>
+                <ChevronDown size={16} className={`transition ${profileOpen ? 'rotate-180' : ''}`} />
               </button>
-              {dropdownOpen && (
-                <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
-                  <div className="py-1" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
-                    <button
-                      onClick={() => { navigate('/profile'); setDropdownOpen(false); }}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      role="menuitem"
-                    >
-                      {user.name}
-                    </button>
-                    <button
-                      onClick={handleLogout}
-                      className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      role="menuitem"
-                    >
-                      <LogOut size={16} className="mr-2" /> Logout
-                    </button>
+              {profileOpen && (
+                <div className="dropdown-card">
+                  <div className="border-b border-slate-100 px-3 py-3">
+                    <p className="truncate text-sm font-black text-[#073c57]">{user.name}</p>
+                    <p className="truncate text-xs font-semibold text-slate-500">{user.email}</p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeMenu();
+                      navigate('/profile');
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-700 hover:bg-[#e8f5fb] hover:text-[#145f82]"
+                  >
+                    <User size={16} />
+                    Profile
+                  </button>
+                  {user?.role === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeMenu();
+                        navigate('/admin');
+                      }}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-700 hover:bg-[#e8f5fb] hover:text-[#145f82]"
+                    >
+                      <LayoutDashboard size={16} />
+                      Admin dashboard
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-red-700 hover:bg-red-50"
+                  >
+                    <LogOut size={16} />
+                    Logout
+                  </button>
                 </div>
               )}
             </div>
           ) : (
-            <button onClick={() => navigate('/login')} className="hover:bg-blue-700 px-3 py-2 rounded">Login</button>
+            <button type="button" onClick={() => navigate('/login')} className="btn-primary">
+              Login
+            </button>
           )}
         </div>
-        {/* Mobile menu button */}
-        <button className="md:hidden" onClick={() => setIsOpen(!isOpen)}>
-          {isOpen ? <X size={24} /> : <Menu size={24} />}
+
+        <button
+          type="button"
+          onClick={() => setIsOpen((open) => !open)}
+          className="btn-secondary px-3 md:hidden"
+          aria-label="Toggle navigation menu"
+          aria-expanded={isOpen}
+        >
+          {isOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
       </div>
-      {/* Mobile menu */}
+
       {isOpen && (
-        <div className="md:hidden pb-4 space-y-2">
-          <NavLink to="/" className={linkClass('home')} onClick={() => setIsOpen(false)}>Home</NavLink>
-          <NavLink to="/about" className={linkClass('about')} onClick={() => setIsOpen(false)}>About</NavLink>
-          <NavLink to="/contact" className={linkClass('contact')} onClick={() => setIsOpen(false)}>Contact</NavLink>
-          {user?.name && (
-            <>
-              <NavLink to="/clubs" className={linkClass('clubs')} onClick={() => setIsOpen(false)}>Clubs</NavLink>
-              <NavLink to="/events" className={linkClass('events')} onClick={() => setIsOpen(false)}>Events</NavLink>
-              {user?.role === 'admin' && (
-                <NavLink to="/admin" className={linkClass('admin')} onClick={() => setIsOpen(false)}>Admin Panel</NavLink>
-              )}
-              <button onClick={handleLogout} className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                <LogOut size={16} className="mr-2" /> Logout
+        <div className="border-t border-slate-200 bg-white md:hidden">
+          <nav className="page-container flex flex-col gap-2 py-4">
+            {links.map((link) => (
+              <NavLink key={link.to} to={link.to} onClick={closeMenu} className={navLinkClass}>
+                {link.label}
+              </NavLink>
+            ))}
+            {user?.name ? (
+              <div className="mt-2 grid gap-2 rounded-2xl border border-[#bcddeb] bg-[#eef8fc] p-3">
+                <button type="button" onClick={() => { closeMenu(); navigate('/profile'); }} className="btn-secondary w-full">
+                  <User size={16} />
+                  {user.name.split(' ')[0]} profile
+                </button>
+                <button type="button" onClick={handleLogout} className="btn-secondary w-full">
+                  <LogOut size={16} />
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  closeMenu();
+                  navigate('/login');
+                }}
+                className="btn-primary mt-2 w-full"
+              >
+                Login
               </button>
-            </>
-          )}
-          {!user?.name && (
-            <button onClick={() => { navigate('/login'); setIsOpen(false); }} className="hover:bg-blue-700 px-3 py-2 rounded">Login</button>
-          )}
+            )}
+          </nav>
         </div>
       )}
-    </nav>
+    </header>
   );
 };
 

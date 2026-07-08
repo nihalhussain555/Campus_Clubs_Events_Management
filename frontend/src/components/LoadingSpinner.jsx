@@ -3,10 +3,10 @@ import { Loader } from 'lucide-react';
 
 const LoadingSpinner = ({ message = 'Loading...' }) => {
   return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="text-center">
-        <Loader className="animate-spin mx-auto mb-4" size={48} />
-        <p className="text-gray-600">{message}</p>
+    <div className="flex min-h-screen items-center justify-center bg-[#f6f9fb] px-4">
+      <div className="app-card text-center">
+        <Loader className="mx-auto mb-4 animate-spin text-[#145f82]" size={42} />
+        <p className="font-bold text-slate-700">{message}</p>
       </div>
     </div>
   );

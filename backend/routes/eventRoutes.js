@@ -17,8 +17,8 @@ const router = express.Router();
 // Public routes
 router.get('/', getAllEvents);
 router.get('/upcoming', getUpcomingEvents);
-router.get('/:id', getEventById);
 router.get('/club/:clubId', getEventsByClub);
+router.get('/:id', getEventById);
 
 // Admin routes
 router.post('/', verifyToken, verifyAdmin, createEvent);

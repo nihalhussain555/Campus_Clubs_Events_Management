@@ -49,8 +49,6 @@ function App() {
           </ProtectedRoute>
         } />
 
-        {/* Default Route */}
-        <Route path="/" element={<Navigate to="/profile" replace />} />
         <Route path="*" element={<Navigate to="/profile" replace />} />
       </Routes>
     </Router>

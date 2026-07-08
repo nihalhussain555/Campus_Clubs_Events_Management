@@ -4,7 +4,7 @@ import User from '../models/User.js';
 // Create Club (Admin only)
 export const createClub = async (req, res) => {
   try {
-    const { clubName, description } = req.body;
+    const { clubName, description, category } = req.body;
 
     if (!clubName || !description) {
       return res.status(400).json({ message: 'Please provide club name and description' });
@@ -13,6 +13,7 @@ export const createClub = async (req, res) => {
     const club = new Club({
       clubName,
       description,
+      category: category || 'General',
       admin: req.user.id,
       members: [req.user.id]
     });
@@ -61,20 +62,21 @@ export const getClubById = async (req, res) => {
 // Update Club (Admin only)
 export const updateClub = async (req, res) => {
   try {
-    const { clubName, description } = req.body;
+    const { clubName, description, category } = req.body;
 
     const club = await Club.findById(req.params.id);
     if (!club) {
       return res.status(404).json({ message: 'Club not found' });
     }
 
-    // Check if user is admin of this club
-    if (club.admin.toString() !== req.user.id) {
+    // Check if user is admin of this club or system admin
+    if (club.admin.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Not authorized to update this club' });
     }
 
     if (clubName) club.clubName = clubName;
     if (description) club.description = description;
+    if (category) club.category = category;
 
     await club.save();
 

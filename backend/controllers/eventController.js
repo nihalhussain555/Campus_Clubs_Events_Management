@@ -5,7 +5,7 @@ import Club from '../models/Club.js';
 // Create Event (Admin only)
 export const createEvent = async (req, res) => {
   try {
-    const { title, description, date, location, club, capacity } = req.body;
+    const { title, description, date, location, club, capacity, category } = req.body;
 
     if (!title || !description || !date || !club) {
       return res.status(400).json({ message: 'Please provide all required fields' });
@@ -23,7 +23,8 @@ export const createEvent = async (req, res) => {
       date,
       location,
       club,
-      capacity: capacity || 100
+      capacity: capacity || 100,
+      category: category || clubExists.category || 'General'
     });
 
     await event.save();
@@ -41,7 +42,7 @@ export const createEvent = async (req, res) => {
 export const getAllEvents = async (req, res) => {
   try {
     const events = await Event.find()
-      .populate('club', 'clubName')
+      .populate('club', 'clubName category')
       .populate('registeredStudents', 'name email');
 
     res.status(200).json({ events });
@@ -54,7 +55,7 @@ export const getAllEvents = async (req, res) => {
 export const getEventById = async (req, res) => {
   try {
     const event = await Event.findById(req.params.id)
-      .populate('club', 'clubName description')
+      .populate('club', 'clubName description category')
       .populate('registeredStudents', 'name email');
 
     if (!event) {
@@ -71,7 +72,7 @@ export const getEventById = async (req, res) => {
 export const getEventsByClub = async (req, res) => {
   try {
     const events = await Event.find({ club: req.params.clubId })
-      .populate('club', 'clubName')
+      .populate('club', 'clubName category')
       .populate('registeredStudents', 'name email');
 
     res.status(200).json({ events });
@@ -83,7 +84,7 @@ export const getEventsByClub = async (req, res) => {
 // Update Event (Admin only)
 export const updateEvent = async (req, res) => {
   try {
-    const { title, description, date, location, capacity, status } = req.body;
+    const { title, description, date, location, capacity, status, category, club } = req.body;
 
     const event = await Event.findById(req.params.id);
     if (!event) {
@@ -96,6 +97,8 @@ export const updateEvent = async (req, res) => {
     if (location) event.location = location;
     if (capacity) event.capacity = capacity;
     if (status) event.status = status;
+    if (category) event.category = category;
+    if (club) event.club = club;
 
     await event.save();
 
@@ -188,7 +191,7 @@ export const getUpcomingEvents = async (req, res) => {
       date: { $gte: now },
       status: 'upcoming'
     })
-      .populate('club', 'clubName')
+      .populate('club', 'clubName category')
       .populate('registeredStudents', 'name email')
       .sort({ date: 1 });
 

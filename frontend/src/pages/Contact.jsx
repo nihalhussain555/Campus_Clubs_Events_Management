@@ -1,215 +1,144 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Mail, MapPin, Phone, Send } from 'lucide-react';
 import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
 import Toast from '../components/Toast';
-import { Mail, Phone, MapPin, Send } from 'lucide-react';
 
 const Contact = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    subject: '',
-    message: ''
-  });
+  const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
-  const navigate = useNavigate();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    
-    // Validation
+
     if (!formData.name || !formData.email || !formData.subject || !formData.message) {
       setToast({ message: 'Please fill all fields', type: 'error' });
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       setToast({ message: 'Please enter a valid email address', type: 'error' });
       return;
     }
 
     setLoading(true);
-
-    try {
-      // Simulate form submission (in production, send to backend)
-      setTimeout(() => {
-        setToast({ message: 'Thank you for reaching out! We\'ll get back to you soon.', type: 'success' });
-        setFormData({ name: '', email: '', subject: '', message: '' });
-        setLoading(false);
-      }, 1500);
-    } catch (error) {
-      setToast({ message: 'Error sending message. Please try again.', type: 'error' });
+    window.setTimeout(() => {
+      setToast({ message: "Thank you for reaching out. We'll get back to you soon.", type: 'success' });
+      setFormData({ name: '', email: '', subject: '', message: '' });
       setLoading(false);
-    }
+    }, 900);
   };
 
+  const contactCards = [
+    [Mail, 'Email', ['support@campusclubs.com', 'hello@campusclubs.com']],
+    [Phone, 'Phone', ['+1 (555) 123-4567', 'Mon - Fri, 9:00 AM - 5:00 PM']],
+    [MapPin, 'Location', ['Campus Student Center', 'Room 101, Building A']],
+  ];
+
+  const faqs = [
+    ['How do I join a club?', 'Log in, open Clubs, and select Join on any club that matches your interests.'],
+    ['Can I create my own club?', 'Admins can create clubs from the admin tools. Contact campus staff to request admin access.'],
+    ['How do I register for events?', 'Open Events, choose an event, and complete the registration confirmation.'],
+    ['How can I update my profile?', 'Use the Profile page to edit your visible account information.'],
+  ];
+
   return (
-    <div className="contact-page">
+    <div className="app-page">
       <Navbar />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {/* Header */}
-      <section className="contact-header">
-        <div className="contact-header-container">
-          <h1 className="contact-title">Contact Us</h1>
-          <p className="contact-subtitle">
-            Have questions? We'd love to hear from you
-          </p>
-        </div>
-      </section>
-
-      {/* Contact Information */}
-      <section className="contact-info">
-        <div className="contact-info-container">
-          <div className="contact-info-grid">
-            <div className="contact-card">
-              <Mail className="contact-icon" size={40} />
-              <h3 className="contact-card-title">Email</h3>
-              <p className="contact-text">support@campusclubs.com</p>
-              <p className="contact-text">hello@campusclubs.com</p>
-            </div>
-            <div className="contact-card">
-              <Phone className="contact-icon" size={40} />
-              <h3 className="contact-card-title">Phone</h3>
-              <p className="contact-text">+1 (555) 123-4567</p>
-              <p className="contact-text">Mon - Fri, 9:00 AM - 5:00 PM</p>
-            </div>
-            <div className="text-center p-8 bg-gray-50 rounded-lg">
-              <MapPin className="mx-auto mb-4 text-blue-600" size={40} />
-              <h3 className="text-xl font-semibold mb-2 text-gray-800">Location</h3>
-              <p className="text-gray-600">Campus Student Center</p>
-              <p className="text-gray-600">Room 101, Building A</p>
+      <main>
+        <section className="page-section pt-8">
+          <div className="page-container">
+            <div className="hero-shell">
+              <span className="eyebrow">Contact us</span>
+              <h1 className="display-title">Questions, ideas, or campus support.</h1>
+              <p className="section-copy mt-6">
+                Send a message to the Campus Clubs team and we will help with clubs, events, accounts, or admin access.
+              </p>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Contact Form */}
-      <section className="py-16 bg-gray-100">
-        <div className="max-w-2xl mx-auto px-4">
-          <div className="bg-white rounded-lg shadow-lg p-8">
-            <h2 className="text-3xl font-bold mb-8 text-gray-800">Send us a Message</h2>
-            
-            {toast && (
-              <Toast
-                message={toast.message}
-                type={toast.type}
-                onClose={() => setToast(null)}
-              />
-            )}
+        <section className="page-section">
+          <div className="page-container grid gap-5 md:grid-cols-3">
+            {contactCards.map(([Icon, title, lines]) => (
+              <article key={title} className="app-card app-card-hover text-center">
+                <span className="icon-tile mx-auto mb-5">
+                  <Icon size={22} />
+                </span>
+                <h3 className="mb-2 text-xl font-black text-black">{title}</h3>
+                {lines.map((line) => (
+                  <p key={line} className="text-sm font-semibold text-slate-600">
+                    {line}
+                  </p>
+                ))}
+              </article>
+            ))}
+          </div>
+        </section>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-gray-700 font-semibold mb-2">Full Name</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Your name"
-                />
+        <section className="page-section bg-white/70">
+          <div className="page-container grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+            <div>
+              <span className="eyebrow">Message</span>
+              <h2 className="section-title">Tell us what you need.</h2>
+              <p className="section-copy mt-5">
+                Keep it short or detailed. The form validates your details and gives you a clean confirmation state.
+              </p>
+            </div>
+            <form onSubmit={handleSubmit} className="app-card space-y-5">
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  <label className="field-label">Full name</label>
+                  <input name="name" value={formData.name} onChange={handleChange} className="field" placeholder="Your name" />
+                </div>
+                <div>
+                  <label className="field-label">Email address</label>
+                  <input name="email" type="email" value={formData.email} onChange={handleChange} className="field" placeholder="your@email.com" />
+                </div>
               </div>
-
               <div>
-                <label className="block text-gray-700 font-semibold mb-2">Email Address</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="your@email.com"
-                />
+                <label className="field-label">Subject</label>
+                <input name="subject" value={formData.subject} onChange={handleChange} className="field" placeholder="What is this about?" />
               </div>
-
               <div>
-                <label className="block text-gray-700 font-semibold mb-2">Subject</label>
-                <input
-                  type="text"
-                  name="subject"
-                  value={formData.subject}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Subject of your message"
-                />
+                <label className="field-label">Message</label>
+                <textarea name="message" value={formData.message} onChange={handleChange} className="field min-h-36" placeholder="Write your message" />
               </div>
-
-              <div>
-                <label className="block text-gray-700 font-semibold mb-2">Message</label>
-                <textarea
-                  name="message"
-                  value={formData.message}
-                  onChange={handleChange}
-                  rows="6"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Your message..."
-                ></textarea>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400 flex items-center justify-center gap-2"
-              >
-                <Send size={20} />
-                {loading ? 'Sending...' : 'Send Message'}
+              <button type="submit" disabled={loading} className="btn-primary w-full">
+                <Send size={18} />
+                {loading ? 'Sending...' : 'Send message'}
               </button>
             </form>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* FAQ Section */}
-      <section className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12 text-gray-800">Frequently Asked Questions</h2>
-          <div className="space-y-6 max-w-3xl mx-auto">
-            <div className="bg-gray-50 p-6 rounded-lg">
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">How do I join a club?</h3>
-              <p className="text-gray-600">
-                Simply log into your account, browse the clubs page, and click the "Join" button on any club you're interested in. You'll be added to the club immediately!
-              </p>
+        <section className="page-section">
+          <div className="page-container">
+            <div className="mb-8 text-center">
+              <span className="eyebrow">FAQ</span>
+              <h2 className="section-title">Fast answers.</h2>
             </div>
-            <div className="bg-gray-50 p-6 rounded-lg">
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">Can I create my own club?</h3>
-              <p className="text-gray-600">
-                If you have admin privileges, you can create a new club through the admin panel. Please contact us if you'd like to establish a new club.
-              </p>
-            </div>
-            <div className="bg-gray-50 p-6 rounded-lg">
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">How do I register for events?</h3>
-              <p className="text-gray-600">
-                Visit the Events page, select an event you're interested in, and click "Register". You'll receive updates and reminders about the event.
-              </p>
-            </div>
-            <div className="bg-gray-50 p-6 rounded-lg">
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">How can I update my profile?</h3>
-              <p className="text-gray-600">
-                Go to your profile page in the navigation menu and click "Edit Profile" to update your information.
-              </p>
+            <div className="mx-auto grid max-w-4xl gap-4">
+              {faqs.map(([question, answer]) => (
+                <article key={question} className="app-card">
+                  <h3 className="font-black text-black">{question}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{answer}</p>
+                </article>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* Footer */}
-      <footer className="bg-gray-800 text-white py-8">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="mb-4">&copy; 2026 Campus Clubs. All rights reserved.</p>
-          <div className="flex justify-center gap-6">
-            <button onClick={() => navigate('/')} className="hover:text-blue-400">Home</button>
-            <button onClick={() => navigate('/about')} className="hover:text-blue-400">About</button>
-            <button onClick={() => navigate('/contact')} className="hover:text-blue-400">Contact</button>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 };

@@ -1,18 +1,18 @@
 import React, { useEffect, useState } from 'react';
+import { Calendar, MapPin, Plus, Trash2, Users } from 'lucide-react';
 import Navbar from '../components/Navbar';
-import { eventAPI } from '../services/api';
+import { clubAPI, eventAPI } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
 import RegisterEventModal from '../components/RegisterEventModal';
-import { Calendar, MapPin, Users, Trash2, Plus } from 'lucide-react';
 
 const Events = () => {
   const [events, setEvents] = useState([]);
+  const [clubs, setClubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [registeredEventIds, setRegisteredEventIds] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [clubs, setClubs] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [registeringEvent, setRegisteringEvent] = useState(false);
@@ -22,55 +22,45 @@ const Events = () => {
     date: '',
     location: '',
     club: '',
-    capacity: 100
+    capacity: 100,
   });
   const user = JSON.parse(localStorage.getItem('user') || '{}');
-
-  useEffect(() => {
-    fetchEvents();
-    fetchClubs();
-  }, []);
 
   const fetchEvents = async () => {
     try {
       const response = await eventAPI.getAllEvents();
-      setEvents(response.data.events);
-
+      setEvents(response.data.events || []);
       const userProfile = JSON.parse(localStorage.getItem('user') || '{}');
-      if (userProfile.registeredEvents) {
-        setRegisteredEventIds(userProfile.registeredEvents.map(event =>
-          typeof event === 'string' ? event : event._id
-        ));
-      }
-      setLoading(false);
+      setRegisteredEventIds((userProfile.registeredEvents || []).map((event) => (typeof event === 'string' ? event : event._id)));
     } catch (error) {
       setToast({ message: 'Error loading events', type: 'error' });
+    } finally {
       setLoading(false);
     }
   };
 
   const fetchClubs = async () => {
     try {
-      const response = await (await import('../services/api')).clubAPI.getAllClubs();
-      setClubs(response.data.clubs);
+      const response = await clubAPI.getAllClubs();
+      setClubs(response.data.clubs || []);
     } catch (error) {
-      console.error('Error loading clubs:', error);
+      setClubs([]);
     }
   };
 
-  const handleRegisterEventClick = (event) => {
-    setSelectedEvent(event);
-    setShowRegisterModal(true);
-  };
+  useEffect(() => {
+    fetchEvents();
+    fetchClubs();
+  }, []);
 
-  const handleConfirmRegister = async (modalData) => {
+  const handleConfirmRegister = async () => {
     if (!selectedEvent) return;
-    
+
     setRegisteringEvent(true);
     try {
       await eventAPI.registerForEvent(selectedEvent._id);
-      setRegisteredEventIds([...registeredEventIds, selectedEvent._id]);
-      setToast({ message: 'Successfully registered for event!', type: 'success' });
+      setRegisteredEventIds((ids) => [...ids, selectedEvent._id]);
+      setToast({ message: 'Successfully registered for event', type: 'success' });
       setShowRegisterModal(false);
       setSelectedEvent(null);
       fetchEvents();
@@ -84,8 +74,8 @@ const Events = () => {
   const handleUnregisterEvent = async (eventId) => {
     try {
       await eventAPI.unregisterFromEvent(eventId);
-      setRegisteredEventIds(registeredEventIds.filter(id => id !== eventId));
-      setToast({ message: 'Successfully unregistered from event!', type: 'success' });
+      setRegisteredEventIds((ids) => ids.filter((id) => id !== eventId));
+      setToast({ message: 'Successfully unregistered from event', type: 'success' });
       fetchEvents();
     } catch (error) {
       setToast({ message: 'Error unregistering from event', type: 'error' });
@@ -101,7 +91,7 @@ const Events = () => {
 
     try {
       await eventAPI.createEvent(formData);
-      setToast({ message: 'Event created successfully!', type: 'success' });
+      setToast({ message: 'Event created successfully', type: 'success' });
       setFormData({ title: '', description: '', date: '', location: '', club: '', capacity: 100 });
       setShowForm(false);
       fetchEvents();
@@ -111,209 +101,156 @@ const Events = () => {
   };
 
   const handleDeleteEvent = async (eventId) => {
-    if (window.confirm('Are you sure you want to delete this event?')) {
-      try {
-        await eventAPI.deleteEvent(eventId);
-        setToast({ message: 'Event deleted successfully!', type: 'success' });
-        fetchEvents();
-      } catch (error) {
-        setToast({ message: 'Error deleting event', type: 'error' });
-      }
+    if (!window.confirm('Are you sure you want to delete this event?')) return;
+    try {
+      await eventAPI.deleteEvent(eventId);
+      setToast({ message: 'Event deleted successfully', type: 'success' });
+      fetchEvents();
+    } catch (error) {
+      setToast({ message: 'Error deleting event', type: 'error' });
     }
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (dateString) =>
+    new Date(dateString).toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
-  };
 
-  if (loading) return <LoadingSpinner />;
+  if (loading) return <LoadingSpinner message="Loading events..." />;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="app-page">
       <Navbar />
-      
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div className="max-w-7xl mx-auto px-4 py-8 glass">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800">📅 All Events</h1>
-          {user?.role === 'admin' && (
-            <button
-              onClick={() => setShowForm(!showForm)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-            >
-              <Plus size={20} /> Create Event
-            </button>
-          )}
-        </div>
+      <main className="page-section pt-8">
+        <div className="page-container">
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <span className="eyebrow">Campus calendar</span>
+              <h1 className="display-title text-4xl sm:text-5xl">All events</h1>
+              <p className="section-copy mt-4">Register for activities and keep track of what is happening next.</p>
+            </div>
+            {user?.role === 'admin' && (
+              <button type="button" onClick={() => setShowForm((open) => !open)} className="btn-primary">
+                <Plus size={18} />
+                Create event
+              </button>
+            )}
+          </div>
 
-        {showForm && user?.role === 'admin' && (
-          <div className="bg-white rounded-lg shadow p-6 mb-8">
-            <h2 className="text-2xl font-bold mb-4">Create New Event</h2>
-            <form onSubmit={handleCreateEvent} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {showForm && user?.role === 'admin' && (
+            <form onSubmit={handleCreateEvent} className="app-card mb-8 space-y-5">
+              <h2 className="text-2xl font-black text-black">Create new event</h2>
+              <div className="grid gap-5 md:grid-cols-2">
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-2">Event Title *</label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Tech Workshop"
-                  />
+                  <label className="field-label">Event title *</label>
+                  <input value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} className="field" placeholder="Tech Workshop" />
                 </div>
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-2">Club *</label>
-                  <select
-                    value={formData.club}
-                    onChange={(e) => setFormData({ ...formData, club: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
+                  <label className="field-label">Club *</label>
+                  <select value={formData.club} onChange={(e) => setFormData({ ...formData, club: e.target.value })} className="field">
                     <option value="">Select a club</option>
-                    {clubs.map(club => (
+                    {clubs.map((club) => (
                       <option key={club._id} value={club._id}>{club.clubName}</option>
                     ))}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-gray-700 font-semibold mb-2">Description *</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Event description"
-                  rows="3"
-                />
+                <label className="field-label">Description *</label>
+                <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="field min-h-28" placeholder="Describe the event" />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid gap-5 md:grid-cols-3">
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-2">Date & Time *</label>
-                  <input
-                    type="datetime-local"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <label className="field-label">Date and time *</label>
+                  <input type="datetime-local" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="field" />
                 </div>
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-2">Location</label>
-                  <input
-                    type="text"
-                    value={formData.location}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Room 101"
-                  />
+                  <label className="field-label">Location</label>
+                  <input value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })} className="field" placeholder="Room 101" />
+                </div>
+                <div>
+                  <label className="field-label">Capacity</label>
+                  <input type="number" min="1" value={formData.capacity} onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })} className="field" />
                 </div>
               </div>
-              <div>
-                <label className="block text-gray-700 font-semibold mb-2">Capacity</label>
-                <input
-                  type="number"
-                  value={formData.capacity}
-                  onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  min="1"
-                />
-              </div>
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
-                >
-                  Create Event
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="bg-gray-300 text-gray-800 px-6 py-2 rounded-lg hover:bg-gray-400"
-                >
-                  Cancel
-                </button>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button type="submit" className="btn-primary">Create event</button>
+                <button type="button" onClick={() => setShowForm(false)} className="btn-secondary">Cancel</button>
               </div>
             </form>
-          </div>
-        )}
+          )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {events.map(event => (
-            <div key={event._id} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
-              <h3 className="text-xl font-bold text-gray-800 mb-2">{event.title}</h3>
-              
-              <p className="text-gray-600 mb-4">{event.description}</p>
-              
-              <div className="space-y-2 text-gray-700 mb-4">
-                <div className="flex items-center gap-2">
-                  <Calendar size={16} className="text-blue-500" />
-                  <span>{formatDate(event.date)}</span>
-                </div>
-                {event.location && (
-                  <div className="flex items-center gap-2">
-                    <MapPin size={16} className="text-red-500" />
-                    <span>{event.location}</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <Users size={16} className="text-green-500" />
-                  <span>{event.registeredStudents?.length || 0} / {event.capacity} registered</span>
-                </div>
-              </div>
+          {events.length > 0 ? (
+            <div className="grid gap-5 lg:grid-cols-2">
+              {events.map((event) => {
+                const isRegistered = registeredEventIds.includes(event._id);
+                const isFull = (event.registeredStudents?.length || 0) >= event.capacity;
+                return (
+                  <article key={event._id} className="app-card app-card-hover">
+                    <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <h3 className="text-2xl font-black text-black">{event.title}</h3>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">{event.description}</p>
+                      </div>
+                      <span className="chip capitalize">{event.status || 'upcoming'}</span>
+                    </div>
 
-              <div className="mb-3">
-                <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${
-                  event.status === 'upcoming' ? 'bg-blue-100 text-blue-800' :
-                  event.status === 'ongoing' ? 'bg-green-100 text-green-800' :
-                  event.status === 'completed' ? 'bg-gray-100 text-gray-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                </span>
-              </div>
+                    <div className="mb-5 grid gap-3 text-sm font-bold text-slate-600">
+                      <div className="flex items-center gap-2">
+                        <Calendar size={17} className="text-[#145f82]" />
+                        {formatDate(event.date)}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <MapPin size={17} className="text-[#145f82]" />
+                        {event.location || 'To be announced'}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Users size={17} className="text-[#145f82]" />
+                        {event.registeredStudents?.length || 0} / {event.capacity} registered
+                      </div>
+                    </div>
 
-              <div className="flex gap-2">
-                {registeredEventIds.includes(event._id) ? (
-                  <button
-                    onClick={() => handleUnregisterEvent(event._id)}
-                    className="flex-1 bg-red-500 bg-opacity-60 text-white px-4 py-2 rounded-lg hover:bg-red-600 font-semibold transition"
-                  >
-                    Tap to Unregister
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleRegisterEventClick(event)}
-                    disabled={event.registeredStudents?.length >= event.capacity}
-                    className="flex-1 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
-                  >
-                    {event.registeredStudents?.length >= event.capacity ? 'Full' : 'Register'}
-                  </button>
-                )}
-                
-                {user?.role === 'admin' && (
-                  <button
-                    onClick={() => handleDeleteEvent(event._id)}
-                    className="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-400"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                )}
-              </div>
+                    <div className="flex gap-2">
+                      {isRegistered ? (
+                        <button type="button" onClick={() => handleUnregisterEvent(event._id)} className="btn-danger flex-1">
+                          Unregister
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedEvent(event);
+                            setShowRegisterModal(true);
+                          }}
+                          disabled={isFull}
+                          className="btn-primary flex-1"
+                        >
+                          {isFull ? 'Full' : 'Register'}
+                        </button>
+                      )}
+                      {user?.role === 'admin' && (
+                        <button type="button" onClick={() => handleDeleteEvent(event._id)} className="btn-secondary px-3" aria-label={`Delete ${event.title}`}>
+                          <Trash2 size={18} />
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
-          ))}
+          ) : (
+            <div className="app-card text-center">
+              <p className="text-lg font-bold text-slate-500">No events available yet.</p>
+            </div>
+          )}
         </div>
-
-        {events.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">No events available yet</p>
-          </div>
-        )}
-      </div>
+      </main>
 
       <RegisterEventModal
         event={selectedEvent}

@@ -1,20 +1,27 @@
-import React, { useState } from 'react';
-import { AlertCircle, CheckCircle } from 'lucide-react';
+import React from 'react';
+import { AlertCircle, CheckCircle, X } from 'lucide-react';
 
 const Toast = ({ message, type = 'success', onClose }) => {
   React.useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
+    const timer = setTimeout(onClose, 3200);
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  const bgColor = type === 'success' ? 'bg-green-100 border-green-400' : 'bg-red-100 border-red-400';
-  const textColor = type === 'success' ? 'text-green-700' : 'text-red-700';
-  const Icon = type === 'success' ? CheckCircle : AlertCircle;
+  const isSuccess = type === 'success';
+  const Icon = isSuccess ? CheckCircle : AlertCircle;
 
   return (
-    <div className={`fixed top-4 right-4 ${bgColor} border-l-4 ${textColor} p-4 rounded shadow-lg flex items-center gap-2 max-w-sm`}>
-      <Icon size={20} />
-      <span>{message}</span>
+    <div
+      className={`fixed right-4 top-24 z-50 flex max-w-sm items-start gap-3 rounded-2xl border bg-white p-4 shadow-[0_20px_60px_rgba(15,23,42,0.18)] ${
+        isSuccess ? 'border-emerald-200 text-emerald-800' : 'border-red-200 text-red-800'
+      }`}
+      role="status"
+    >
+      <Icon size={20} className="mt-0.5 shrink-0" />
+      <span className="text-sm font-semibold">{message}</span>
+      <button type="button" onClick={onClose} className="ml-2 rounded-full p-1 hover:bg-slate-100" aria-label="Close notification">
+        <X size={14} />
+      </button>
     </div>
   );
 };

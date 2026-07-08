@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { X, Calendar, MapPin, Users } from 'lucide-react';
+import { Calendar, MapPin, Users, X } from 'lucide-react';
 
 const RegisterEventModal = ({ event, isOpen, onClose, onConfirm, loading }) => {
   const [formData, setFormData] = useState({
     specialRequirements: '',
-    dietaryRestrictions: ''
+    dietaryRestrictions: '',
   });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = (e) => {
@@ -17,121 +17,75 @@ const RegisterEventModal = ({ event, isOpen, onClose, onConfirm, loading }) => {
     onConfirm(formData);
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (dateString) =>
+    new Date(dateString).toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
-  };
 
   if (!isOpen || !event) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-        {/* Header */}
-        <div className="bg-green-600 text-white p-4 flex justify-between items-center rounded-t-lg">
-          <h2 className="text-xl font-bold">Register for Event</h2>
-          <button
-            onClick={onClose}
-            className="hover:bg-green-700 p-1 rounded"
-          >
-            <X size={24} />
+    <div className="modal-backdrop">
+      <div className="modal-card">
+        <div className="flex items-center justify-between border-b border-slate-200 p-6">
+          <div>
+            <p className="eyebrow mb-2">Event registration</p>
+            <h2 className="text-2xl font-black text-black">{event.title}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="btn-secondary px-3" aria-label="Close modal">
+            <X size={18} />
           </button>
         </div>
 
-        {/* Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-gray-700 font-semibold mb-2">Event Title</label>
-            <input
-              type="text"
-              value={event.title}
-              disabled
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-            />
+        <form onSubmit={handleSubmit} className="space-y-5 p-6">
+          <div className="grid gap-3">
+            <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4">
+              <Calendar className="text-[#145f82]" size={18} />
+              <span className="text-sm font-bold text-slate-700">{formatDate(event.date)}</span>
+            </div>
+            <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4">
+              <MapPin className="text-[#145f82]" size={18} />
+              <span className="text-sm font-bold text-slate-700">{event.location || 'To be announced'}</span>
+            </div>
+            <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4">
+              <Users className="text-[#145f82]" size={18} />
+              <span className="text-sm font-bold text-slate-700">
+                {event.registeredStudents?.length || 0} / {event.capacity || 100} registered
+              </span>
+            </div>
           </div>
 
           <div>
-            <label className="block text-gray-700 font-semibold mb-2">
-              <Calendar className="inline mr-2" size={16} />
-              Date & Time
-            </label>
-            <input
-              type="text"
-              value={formatDate(event.date)}
-              disabled
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 font-semibold mb-2">
-              <MapPin className="inline mr-2" size={16} />
-              Location
-            </label>
-            <input
-              type="text"
-              value={event.location || 'To be announced'}
-              disabled
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 font-semibold mb-2">
-              <Users className="inline mr-2" size={16} />
-              Attendees
-            </label>
-            <input
-              type="text"
-              value={`${event.registrations?.length || 0}/${event.capacity || 100}`}
-              disabled
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 font-semibold mb-2">Special Requirements (Optional)</label>
+            <label className="field-label">Special requirements</label>
             <textarea
               name="specialRequirements"
               value={formData.specialRequirements}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-              placeholder="e.g., Accessibility needs, mobility assistance..."
-              rows="2"
+              className="field min-h-24"
+              placeholder="Accessibility needs, mobility assistance, or equipment requests"
             />
           </div>
 
           <div>
-            <label className="block text-gray-700 font-semibold mb-2">Dietary Restrictions (Optional)</label>
+            <label className="field-label">Dietary restrictions</label>
             <textarea
               name="dietaryRestrictions"
               value={formData.dietaryRestrictions}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-              placeholder="e.g., Vegetarian, Gluten-free, Vegan..."
-              rows="2"
+              className="field min-h-24"
+              placeholder="Vegetarian, vegan, gluten-free, allergies"
             />
           </div>
 
-          {/* Footer */}
-          <div className="flex gap-3 pt-4 border-t">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 bg-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-400 font-semibold"
-            >
+          <div className="grid gap-3 border-t border-slate-200 pt-5 sm:grid-cols-2">
+            <button type="button" onClick={onClose} className="btn-secondary w-full">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold disabled:bg-gray-400"
-            >
+            <button type="submit" disabled={loading} className="btn-primary w-full">
               {loading ? 'Registering...' : 'Register'}
             </button>
           </div>

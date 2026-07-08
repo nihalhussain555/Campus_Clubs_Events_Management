@@ -1,202 +1,221 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowRight, Award, Calendar, Sparkles, Users } from 'lucide-react';
 import Navbar from '../components/Navbar';
-import { Users, Calendar, Award, ArrowRight } from 'lucide-react';
+import Footer from '../components/Footer';
 import { clubAPI, eventAPI } from '../services/api';
+
+const normalizeList = (payload, key) => payload?.[key] || (Array.isArray(payload) ? payload : []);
 
 const Home = () => {
   const [clubs, setClubs] = useState([]);
   const [events, setEvents] = useState([]);
-  const [loadingClubs, setLoadingClubs] = useState(true);
-  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    fetchFeaturedClubs();
-    fetchUpcomingEvents();
-  }, []);
-
-  const fetchFeaturedClubs = async () => {
-    try {
-      const response = await clubAPI.getAllClubs();
-      setClubs(response.data.slice(0, 3)); // Show 3 featured clubs
-      setLoadingClubs(false);
-    } catch (error) {
-      console.error('Error fetching clubs:', error);
-      setLoadingClubs(false);
-    }
-  };
-
-  const fetchUpcomingEvents = async () => {
-    try {
-      const response = await eventAPI.getAllEvents();
-      setEvents(response.data.slice(0, 3)); // Show 3 upcoming events
-      setLoadingEvents(false);
-    } catch (error) {
-      console.error('Error fetching events:', error);
-      setLoadingEvents(false);
-    }
-  };
-
   const token = localStorage.getItem('token');
 
+  useEffect(() => {
+    const loadHighlights = async () => {
+      try {
+        const [clubsRes, eventsRes] = await Promise.all([
+          clubAPI.getAllClubs(),
+          eventAPI.getAllEvents(),
+        ]);
+        setClubs(normalizeList(clubsRes.data, 'clubs').slice(0, 3));
+        setEvents(normalizeList(eventsRes.data, 'events').slice(0, 3));
+      } catch (error) {
+        setClubs([]);
+        setEvents([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadHighlights();
+  }, []);
+
+  const features = [
+    {
+      icon: Users,
+      title: 'Find your circle',
+      copy: 'Explore active student groups built around shared interests, skills, and causes.',
+    },
+    {
+      icon: Calendar,
+      title: 'Plan your week',
+      copy: 'Browse upcoming workshops, meetups, competitions, and campus activities in one place.',
+    },
+    {
+      icon: Award,
+      title: 'Build momentum',
+      copy: 'Track memberships and event registrations from a clean personal profile.',
+    },
+  ];
+
   return (
-    <div className="bg-gray-50 min-h-screen main-content">
+    <div className="app-page">
       <Navbar />
-      
-      {/* Hero Section */}
-      <section className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-20">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <h1 className="text-5xl font-bold mb-4">Welcome to Campus Clubs</h1>
-          <p className="text-xl mb-8 text-blue-100">
-            Discover clubs, manage events, and connect with students on campus
-          </p>
-          {!token ? (
-            <div className="space-x-4">
-              <button
-                onClick={() => navigate('/login')}
-                className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition"
-              >
-                Login
-              </button>
-              <button
-                onClick={() => navigate('/login')}
-                className="bg-blue-500 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 transition border-2 border-white"
-              >
-                Sign Up
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition"
-            >
-              Go to Dashboard
-            </button>
-          )}
-        </div>
-      </section>
 
-      {/* Features Section */}
-      <section className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12 text-gray-800">Why Join Campus Clubs?</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="text-center p-6 rounded-lg shadow-md hover:shadow-lg transition">
-              <Users className="mx-auto mb-4 text-blue-600" size={40} />
-              <h3 className="text-xl font-semibold mb-2">Connect with Peers</h3>
-              <p className="text-gray-600">Find and join clubs that match your interests and passions</p>
-            </div>
-            <div className="text-center p-6 rounded-lg shadow-md hover:shadow-lg transition">
-              <Calendar className="mx-auto mb-4 text-blue-600" size={40} />
-              <h3 className="text-xl font-semibold mb-2">Manage Events</h3>
-              <p className="text-gray-600">Register for events and stay updated with club activities</p>
-            </div>
-            <div className="text-center p-6 rounded-lg shadow-md hover:shadow-lg transition">
-              <Award className="mx-auto mb-4 text-blue-600" size={40} />
-              <h3 className="text-xl font-semibold mb-2">Build Skills</h3>
-              <p className="text-gray-600">Develop leadership and professional skills through club activities</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Clubs */}
-      {loadingClubs ? (
-        <div className="text-center py-12">Loading clubs...</div>
-      ) : clubs.length > 0 ? (
-        <section className="py-16">
-          <div className="max-w-7xl mx-auto px-4">
-            <h2 className="text-3xl font-bold mb-12 text-gray-800">Featured Clubs</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {clubs.map((club) => (
-                <div key={club._id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition">
-                  <div className="bg-blue-600 h-32 flex items-center justify-center">
-                    <span className="text-5xl">{club.name.charAt(0)}</span>
-                  </div>
-                  <div className="p-6">
-                    <h3 className="text-xl font-semibold mb-2">{club.name}</h3>
-                    <p className="text-gray-600 mb-4 line-clamp-2">{club.description}</p>
-                    <p className="text-sm text-gray-500 mb-4">👥 {club.members?.length || 0} members</p>
-                    <button
-                      onClick={() => navigate('/clubs')}
-                      className="text-blue-600 font-semibold flex items-center gap-2 hover:text-blue-800"
-                    >
-                      Learn More <ArrowRight size={16} />
+      <main>
+        <section className="page-section pt-8">
+          <div className="page-container">
+            <div className="hero-shell">
+              <div className="relative z-10 grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+                <div>
+                  <span className="eyebrow">Campus experience hub</span>
+                  <h1 className="display-title">Discover clubs, events, and people that move campus forward.</h1>
+                  <p className="section-copy mt-6">
+                    A premium student engagement workspace for finding communities, registering for events,
+                    and managing the activities that shape college life.
+                  </p>
+                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                    <button onClick={() => navigate(token ? '/clubs' : '/register')} className="btn-primary">
+                      {token ? 'Explore Clubs' : 'Get Started'}
+                      <ArrowRight size={18} />
+                    </button>
+                    <button onClick={() => navigate('/events')} className="btn-secondary">
+                      View Events
                     </button>
                   </div>
                 </div>
+
+                <div className="relative">
+                  <div className="rounded-[2rem] bg-black p-2 shadow-[0_30px_90px_rgba(0,0,0,0.22)]">
+                    <div className="rounded-[1.5rem] bg-white p-5">
+                      <div className="mb-5 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Today</p>
+                          <h2 className="text-2xl font-black text-black">Campus Pulse</h2>
+                        </div>
+                        <span className="icon-tile">
+                          <Sparkles size={20} />
+                        </span>
+                      </div>
+                      <div className="grid gap-3">
+                        {[
+                          ['Active clubs', clubs.length || '25+'],
+                          ['Upcoming events', events.length || '12+'],
+                          ['Student community', '10K+'],
+                        ].map(([label, value]) => (
+                          <div key={label} className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
+                            <span className="font-bold text-slate-600">{label}</span>
+                            <span className="text-2xl font-black text-black">{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="page-section">
+          <div className="page-container">
+            <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <span className="eyebrow">Why it works</span>
+                <h2 className="section-title">Designed for student momentum.</h2>
+              </div>
+              <p className="section-copy">Everything is organized for quick scanning, decisive actions, and clear next steps.</p>
+            </div>
+            <div className="grid gap-5 md:grid-cols-3">
+              {features.map(({ icon: Icon, title, copy }) => (
+                <article key={title} className="app-card app-card-hover">
+                  <span className="icon-tile mb-5">
+                    <Icon size={22} />
+                  </span>
+                  <h3 className="mb-2 text-xl font-black text-black">{title}</h3>
+                  <p className="text-sm leading-6 text-slate-600">{copy}</p>
+                </article>
               ))}
             </div>
           </div>
         </section>
-      ) : null}
 
-      {/* Upcoming Events */}
-      {loadingEvents ? (
-        <div className="text-center py-12">Loading events...</div>
-      ) : events.length > 0 ? (
-        <section className="py-16 bg-gray-100">
-          <div className="max-w-7xl mx-auto px-4">
-            <h2 className="text-3xl font-bold mb-12 text-gray-800">Upcoming Events</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {events.map((event) => (
-                <div key={event._id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition">
-                  <div className="bg-gradient-to-r from-green-500 to-blue-600 h-32 flex items-center justify-center text-white">
-                    <Calendar size={40} />
-                  </div>
-                  <div className="p-6">
-                    <h3 className="text-xl font-semibold mb-2">{event.name}</h3>
-                    <p className="text-gray-600 mb-4 line-clamp-2">{event.description}</p>
-                    <p className="text-sm text-gray-500 mb-2">
-                      📅 {new Date(event.date).toLocaleDateString()}
-                    </p>
-                    <p className="text-sm text-gray-500 mb-4">
-                      👥 {event.registrations?.length || 0} registered
-                    </p>
-                    <button
-                      onClick={() => navigate('/events')}
-                      className="text-blue-600 font-semibold flex items-center gap-2 hover:text-blue-800"
-                    >
-                      View Details <ArrowRight size={16} />
-                    </button>
-                  </div>
+        {!loading && clubs.length > 0 && (
+          <section className="page-section bg-white/70">
+            <div className="page-container">
+              <div className="mb-8 flex items-end justify-between gap-4">
+                <div>
+                  <span className="eyebrow">Featured clubs</span>
+                  <h2 className="section-title">Communities to explore.</h2>
                 </div>
-              ))}
+                <button onClick={() => navigate('/clubs')} className="btn-secondary hidden sm:inline-flex">
+                  See all
+                </button>
+              </div>
+              <div className="grid gap-5 md:grid-cols-3">
+                {clubs.map((club) => (
+                  <article key={club._id} className="app-card app-card-hover">
+                    <div className="mb-5 flex h-32 items-center justify-center rounded-2xl bg-[#e8f5fb] text-5xl font-black text-[#145f82]">
+                      {(club.clubName || club.name || 'C').charAt(0)}
+                    </div>
+                    <h3 className="mb-2 text-xl font-black text-black">{club.clubName || club.name}</h3>
+                    <p className="mb-4 line-clamp-3 text-sm leading-6 text-slate-600">{club.description}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="chip">{club.members?.length || 0} members</span>
+                      <button onClick={() => navigate('/clubs')} className="font-bold text-[#145f82] hover:text-black">
+                        Learn more
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {!loading && events.length > 0 && (
+          <section className="page-section">
+            <div className="page-container">
+              <div className="mb-8 flex items-end justify-between gap-4">
+                <div>
+                  <span className="eyebrow">Upcoming events</span>
+                  <h2 className="section-title">What is next on campus.</h2>
+                </div>
+                <button onClick={() => navigate('/events')} className="btn-secondary hidden sm:inline-flex">
+                  See all
+                </button>
+              </div>
+              <div className="grid gap-5 md:grid-cols-3">
+                {events.map((event) => (
+                  <article key={event._id} className="app-card app-card-hover">
+                    <span className="icon-tile mb-5">
+                      <Calendar size={22} />
+                    </span>
+                    <h3 className="mb-2 text-xl font-black text-black">{event.title || event.name}</h3>
+                    <p className="mb-4 line-clamp-3 text-sm leading-6 text-slate-600">{event.description}</p>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="chip">{new Date(event.date).toLocaleDateString()}</span>
+                      <span className="chip">{event.registeredStudents?.length || 0} registered</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        <section className="page-section">
+          <div className="page-container">
+            <div className="rounded-[2rem] bg-black p-8 text-white sm:p-12">
+              <h2 className="max-w-2xl text-3xl font-black leading-tight sm:text-4xl">Ready to build your campus calendar?</h2>
+              <p className="mt-4 max-w-2xl text-white/70">
+                Join clubs, register for events, and keep your student life organized from one calm dashboard.
+              </p>
+              {!token && (
+                <button onClick={() => navigate('/register')} className="mt-7 btn bg-white text-black hover:bg-[#e8f5fb]">
+                  Create account
+                </button>
+              )}
             </div>
           </div>
         </section>
-      ) : null}
+      </main>
 
-      {/* Call to Action */}
-      <section className="bg-blue-600 text-white py-16">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-4">Ready to Get Started?</h2>
-          <p className="mb-8 text-blue-100">
-            Join thousands of students exploring clubs and attending events
-          </p>
-          {!token ? (
-            <button
-              onClick={() => navigate('/login')}
-              className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition"
-            >
-              Join Now
-            </button>
-          ) : null}
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-gray-800 text-white py-8">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="mb-4">&copy; 2026 Campus Clubs. All rights reserved.</p>
-          <div className="flex justify-center gap-6">
-            <button onClick={() => navigate('/')} className="hover:text-blue-400">Home</button>
-            <button onClick={() => navigate('/about')} className="hover:text-blue-400">About</button>
-            <button onClick={() => navigate('/contact')} className="hover:text-blue-400">Contact</button>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 };

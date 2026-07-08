@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { Briefcase, Calendar, Shield, Trash2, Users } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { authAPI, clubAPI, eventAPI } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
-import { Users, Briefcase, Calendar, Edit2, Trash2 } from 'lucide-react';
 
 const AdminPanel = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -12,12 +12,6 @@ const AdminPanel = () => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
-  const [editingClub, setEditingClub] = useState(null);
-  const [editingEvent, setEditingEvent] = useState(null);
-
-  useEffect(() => {
-    fetchAdminData();
-  }, [activeTab]);
 
   const fetchAdminData = async () => {
     try {
@@ -26,221 +20,185 @@ const AdminPanel = () => {
         const [usersRes, clubsRes, eventsRes] = await Promise.all([
           authAPI.getAllUsers(),
           clubAPI.getAllClubs(),
-          eventAPI.getAllEvents()
+          eventAPI.getAllEvents(),
         ]);
-        setUsers(usersRes.data.users);
-        setClubs(clubsRes.data.clubs);
-        setEvents(eventsRes.data.events);
+        setUsers(usersRes.data.users || []);
+        setClubs(clubsRes.data.clubs || []);
+        setEvents(eventsRes.data.events || []);
       } else if (activeTab === 'clubs') {
         const clubsRes = await clubAPI.getAllClubs();
-        setClubs(clubsRes.data.clubs);
+        setClubs(clubsRes.data.clubs || []);
       } else if (activeTab === 'events') {
         const eventsRes = await eventAPI.getAllEvents();
-        setEvents(eventsRes.data.events);
+        setEvents(eventsRes.data.events || []);
       } else if (activeTab === 'users') {
         const usersRes = await authAPI.getAllUsers();
-        setUsers(usersRes.data.users);
+        setUsers(usersRes.data.users || []);
       }
-      setLoading(false);
     } catch (error) {
       setToast({ message: 'Error loading data', type: 'error' });
+    } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchAdminData();
+  }, [activeTab]);
+
   const handleDeleteClub = async (clubId) => {
-    if (window.confirm('Delete this club?')) {
-      try {
-        await clubAPI.deleteClub(clubId);
-        setToast({ message: 'Club deleted', type: 'success' });
-        fetchAdminData();
-      } catch (error) {
-        setToast({ message: 'Error deleting club', type: 'error' });
-      }
+    if (!window.confirm('Delete this club?')) return;
+    try {
+      await clubAPI.deleteClub(clubId);
+      setToast({ message: 'Club deleted', type: 'success' });
+      fetchAdminData();
+    } catch (error) {
+      setToast({ message: 'Error deleting club', type: 'error' });
     }
   };
 
   const handleDeleteEvent = async (eventId) => {
-    if (window.confirm('Delete this event?')) {
-      try {
-        await eventAPI.deleteEvent(eventId);
-        setToast({ message: 'Event deleted', type: 'success' });
-        fetchAdminData();
-      } catch (error) {
-        setToast({ message: 'Error deleting event', type: 'error' });
-      }
+    if (!window.confirm('Delete this event?')) return;
+    try {
+      await eventAPI.deleteEvent(eventId);
+      setToast({ message: 'Event deleted', type: 'success' });
+      fetchAdminData();
+    } catch (error) {
+      setToast({ message: 'Error deleting event', type: 'error' });
     }
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (loading) return <LoadingSpinner message="Loading admin panel..." />;
+
+  const tabs = ['dashboard', 'users', 'clubs', 'events'];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="app-page">
       <Navbar />
-      
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold text-gray-800 mb-8">⚙️ Admin Panel</h1>
-
-        {/* Tab Navigation */}
-        <div className="flex gap-4 mb-8 border-b border-gray-200">
-          {['dashboard', 'users', 'clubs', 'events'].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 font-semibold ${
-                activeTab === tab
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        {/* Dashboard Tab */}
-        {activeTab === 'dashboard' && (
-          <div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-500 text-sm">Total Users</p>
-                    <p className="text-3xl font-bold text-gray-800">{users.length}</p>
-                  </div>
-                  <Users size={40} className="text-blue-500" />
-                </div>
-              </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-500 text-sm">Total Clubs</p>
-                    <p className="text-3xl font-bold text-gray-800">{clubs.length}</p>
-                  </div>
-                  <Briefcase size={40} className="text-green-500" />
-                </div>
-              </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-500 text-sm">Total Events</p>
-                    <p className="text-3xl font-bold text-gray-800">{events.length}</p>
-                  </div>
-                  <Calendar size={40} className="text-purple-500" />
-                </div>
-              </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-500 text-sm">Admins</p>
-                    <p className="text-3xl font-bold text-gray-800">{users.filter(u => u.role === 'admin').length}</p>
-                  </div>
-                  <Users size={40} className="text-red-500" />
-                </div>
-              </div>
-            </div>
+      <main className="page-section pt-8">
+        <div className="page-container">
+          <div className="mb-8">
+            <span className="eyebrow">Administration</span>
+            <h1 className="display-title text-4xl sm:text-5xl">Admin panel</h1>
+            <p className="section-copy mt-4">Monitor users, clubs, events, and platform activity.</p>
           </div>
-        )}
 
-        {/* Users Tab */}
-        {activeTab === 'users' && (
-          <div className="bg-white rounded-lg shadow overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-100 border-b">
-                <tr>
-                  <th className="px-6 py-3 text-left text-gray-700 font-semibold">Name</th>
-                  <th className="px-6 py-3 text-left text-gray-700 font-semibold">Email</th>
-                  <th className="px-6 py-3 text-left text-gray-700 font-semibold">Role</th>
-                  <th className="px-6 py-3 text-left text-gray-700 font-semibold">Clubs</th>
-                  <th className="px-6 py-3 text-left text-gray-700 font-semibold">Events</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map(user => (
-                  <tr key={user._id} className="border-b hover:bg-gray-50">
-                    <td className="px-6 py-3">{user.name}</td>
-                    <td className="px-6 py-3">{user.email}</td>
-                    <td className="px-6 py-3">
-                      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                        user.role === 'admin' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-3">{user.joinedClubs?.length || 0}</td>
-                    <td className="px-6 py-3">{user.registeredEvents?.length || 0}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Clubs Tab */}
-        {activeTab === 'clubs' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {clubs.map(club => (
-              <div key={club._id} className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-xl font-bold text-gray-800 mb-2">{club.clubName}</h3>
-                <p className="text-gray-600 mb-4">{club.description}</p>
-                <div className="mb-4">
-                  <p className="text-gray-700"><span className="font-semibold">Members:</span> {club.members?.length || 0}</p>
-                  <p className="text-gray-700"><span className="font-semibold">Admin:</span> {club.admin?.name || 'Unknown'}</p>
-                </div>
-                <button
-                  onClick={() => handleDeleteClub(club._id)}
-                  className="w-full bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex items-center justify-center gap-2"
-                >
-                  <Trash2 size={18} /> Delete Club
-                </button>
-              </div>
+          <div className="mb-8 flex gap-2 overflow-x-auto rounded-full border border-slate-200 bg-white p-2">
+            {tabs.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                className={`shrink-0 rounded-full px-5 py-2 text-sm font-black capitalize transition ${
+                  activeTab === tab ? 'bg-black text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-black'
+                }`}
+              >
+                {tab}
+              </button>
             ))}
           </div>
-        )}
 
-        {/* Events Tab */}
-        {activeTab === 'events' && (
-          <div className="bg-white rounded-lg shadow overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-100 border-b">
-                <tr>
-                  <th className="px-6 py-3 text-left text-gray-700 font-semibold">Title</th>
-                  <th className="px-6 py-3 text-left text-gray-700 font-semibold">Date</th>
-                  <th className="px-6 py-3 text-left text-gray-700 font-semibold">Registrations</th>
-                  <th className="px-6 py-3 text-left text-gray-700 font-semibold">Status</th>
-                  <th className="px-6 py-3 text-left text-gray-700 font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map(event => (
-                  <tr key={event._id} className="border-b hover:bg-gray-50">
-                    <td className="px-6 py-3 font-semibold">{event.title}</td>
-                    <td className="px-6 py-3">{new Date(event.date).toLocaleDateString()}</td>
-                    <td className="px-6 py-3">{event.registeredStudents?.length || 0} / {event.capacity}</td>
-                    <td className="px-6 py-3">
-                      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                        event.status === 'upcoming' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {event.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-3">
-                      <button
-                        onClick={() => handleDeleteEvent(event._id)}
-                        className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
+          {activeTab === 'dashboard' && (
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+              {[
+                ['Total users', users.length, Users],
+                ['Total clubs', clubs.length, Briefcase],
+                ['Total events', events.length, Calendar],
+                ['Admins', users.filter((u) => u.role === 'admin').length, Shield],
+              ].map(([label, value, Icon]) => (
+                <article key={label} className="metric-card flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
+                    <p className="mt-3 text-4xl font-black text-black">{value}</p>
+                  </div>
+                  <span className="icon-tile">
+                    <Icon size={22} />
+                  </span>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {activeTab === 'users' && (
+            <div className="table-shell">
+              <table className="w-full min-w-[720px]">
+                <thead className="table-head">
+                  <tr>
+                    <th className="table-cell">Name</th>
+                    <th className="table-cell">Email</th>
+                    <th className="table-cell">Role</th>
+                    <th className="table-cell">Clubs</th>
+                    <th className="table-cell">Events</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {users.map((item) => (
+                    <tr key={item._id} className="hover:bg-slate-50">
+                      <td className="table-cell font-bold text-black">{item.name}</td>
+                      <td className="table-cell">{item.email}</td>
+                      <td className="table-cell"><span className="chip capitalize">{item.role}</span></td>
+                      <td className="table-cell">{item.joinedClubs?.length || 0}</td>
+                      <td className="table-cell">{item.registeredEvents?.length || 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeTab === 'clubs' && (
+            <div className="grid gap-5 md:grid-cols-2">
+              {clubs.map((club) => (
+                <article key={club._id} className="app-card app-card-hover">
+                  <h3 className="text-xl font-black text-black">{club.clubName}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{club.description}</p>
+                  <div className="my-5 flex flex-wrap gap-2">
+                    <span className="chip">{club.members?.length || 0} members</span>
+                    <span className="chip">Admin: {club.admin?.name || 'Unknown'}</span>
+                  </div>
+                  <button type="button" onClick={() => handleDeleteClub(club._id)} className="btn-danger w-full">
+                    <Trash2 size={17} />
+                    Delete club
+                  </button>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {activeTab === 'events' && (
+            <div className="table-shell">
+              <table className="w-full min-w-[760px]">
+                <thead className="table-head">
+                  <tr>
+                    <th className="table-cell">Title</th>
+                    <th className="table-cell">Date</th>
+                    <th className="table-cell">Registrations</th>
+                    <th className="table-cell">Status</th>
+                    <th className="table-cell">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {events.map((event) => (
+                    <tr key={event._id} className="hover:bg-slate-50">
+                      <td className="table-cell font-bold text-black">{event.title}</td>
+                      <td className="table-cell">{new Date(event.date).toLocaleDateString()}</td>
+                      <td className="table-cell">{event.registeredStudents?.length || 0} / {event.capacity}</td>
+                      <td className="table-cell"><span className="chip capitalize">{event.status}</span></td>
+                      <td className="table-cell">
+                        <button type="button" onClick={() => handleDeleteEvent(event._id)} className="btn-danger px-3" aria-label={`Delete ${event.title}`}>
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 };

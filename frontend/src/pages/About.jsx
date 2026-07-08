@@ -1,179 +1,120 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CheckCircle, Globe, Users, Zap } from 'lucide-react';
 import Navbar from '../components/Navbar';
-import { CheckCircle, Users, Zap, Globe } from 'lucide-react';
+import Footer from '../components/Footer';
 
 const About = () => {
   const navigate = useNavigate();
 
+  const pillars = [
+    ['Community building', 'Connect students with peers who share interests, goals, and creative energy.', Users],
+    ['Skill development', 'Turn club participation into practical leadership, communication, and teamwork growth.', Zap],
+    ['Campus network', 'Make events, clubs, and student opportunities easier to discover across campus.', Globe],
+  ];
+
+  const features = [
+    'Club discovery with clear membership actions',
+    'Event registration and capacity tracking',
+    'Student profile for memberships and events',
+    'Admin tools for clubs, events, and users',
+  ];
+
   return (
-<div className="page-about">
-  <Navbar />
+    <div className="app-page">
+      <Navbar />
 
-  {/* Header */}
-  <section className="page-about-header">
-    <div className="page-container">
-      <h1 className="page-title">About Campus Clubs</h1>
-      <p className="page-subtitle">
-        Connecting students through shared interests and experiences
-      </p>
-    </div>
-  </section>
-
-  {/* Mission Section */}
-  <section className="section-white">
-    <div className="page-container">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-        <div>
-          <h2 className="section-heading">Our Mission</h2>
-          <p className="section-text">
-            Campus Clubs is a comprehensive platform designed to bring students together and foster a vibrant campus community. We believe that extracurricular activities are crucial for personal development and creating lasting connections.
-          </p>
-              <h2 className="text-3xl font-bold mb-6 text-gray-800">Our Mission</h2>
-              <p className="text-gray-600 mb-4 text-lg">
-                Campus Clubs is a comprehensive platform designed to bring students together and foster a vibrant campus community. We believe that extracurricular activities are crucial for personal development and creating lasting connections.
-              </p>
-              <p className="text-gray-600 text-lg">
-                Our platform makes it easy for students to discover clubs, register for events, and engage with like-minded peers across the campus.
+      <main>
+        <section className="page-section pt-8">
+          <div className="page-container">
+            <div className="hero-shell">
+              <span className="eyebrow">About Campus Clubs</span>
+              <h1 className="display-title">A cleaner way to run student communities.</h1>
+              <p className="section-copy mt-6">
+                Campus Clubs brings discovery, registration, and administration into one focused experience
+                for students and campus organizers.
               </p>
             </div>
-            <div className="bg-blue-100 rounded-lg p-8">
-              <div className="space-y-4">
-                <div className="flex items-start gap-4">
-                  <Users className="text-blue-600 flex-shrink-0" size={24} />
+          </div>
+        </section>
+
+        <section className="page-section">
+          <div className="page-container grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+            <div>
+              <span className="eyebrow">Our mission</span>
+              <h2 className="section-title">Help every student find the right place to belong.</h2>
+              <p className="section-copy mt-5">
+                Extracurricular life shapes confidence, friendships, and future opportunities. This platform
+                makes it simple to find clubs, understand what is happening, and take action without friction.
+              </p>
+            </div>
+            <div className="grid gap-4">
+              {pillars.map(([title, copy, Icon]) => (
+                <article key={title} className="app-card app-card-hover flex gap-4">
+                  <span className="icon-tile">
+                    <Icon size={22} />
+                  </span>
                   <div>
-                    <h3 className="font-semibold text-gray-800">Community Building</h3>
-                    <p className="text-gray-600 text-sm">Connect with students who share your interests</p>
+                    <h3 className="font-black text-black">{title}</h3>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">{copy}</p>
                   </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <Zap className="text-blue-600 flex-shrink-0" size={24} />
-                  <div>
-                    <h3 className="font-semibold text-gray-800">Skill Development</h3>
-                    <p className="text-gray-600 text-sm">Develop leadership and professional skills</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <Globe className="text-blue-600 flex-shrink-0" size={24} />
-                  <div>
-                    <h3 className="font-semibold text-gray-800">Networking</h3>
-                    <p className="text-gray-600 text-sm">Build meaningful connections with peers</p>
-                  </div>
-                </div>
-              </div>
+                </article>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Key Features */}
-      <section className="py-16 bg-gray-100">
-        <div className="max-w-7xl mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12 text-gray-800">Platform Features</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-white p-8 rounded-lg shadow-md">
-              <div className="flex items-start gap-4">
-                <CheckCircle className="text-green-500 flex-shrink-0" size={32} />
-                <div>
-                  <h3 className="text-xl font-semibold mb-2 text-gray-800">Club Discovery</h3>
-                  <p className="text-gray-600">
-                    Browse and search through hundreds of active clubs on campus. Find communities that match your interests and passions.
-                  </p>
-                </div>
-              </div>
+        <section className="page-section bg-white/70">
+          <div className="page-container">
+            <div className="mb-10 text-center">
+              <span className="eyebrow">Platform features</span>
+              <h2 className="section-title">Built for the daily flow of campus life.</h2>
             </div>
-
-            <div className="bg-white p-8 rounded-lg shadow-md">
-              <div className="flex items-start gap-4">
-                <CheckCircle className="text-green-500 flex-shrink-0" size={32} />
-                <div>
-                  <h3 className="text-xl font-semibold mb-2 text-gray-800">Event Management</h3>
-                  <p className="text-gray-600">
-                    View upcoming events, register for activities, and get notifications about club happenings.
-                  </p>
+            <div className="grid gap-5 md:grid-cols-2">
+              {features.map((feature) => (
+                <div key={feature} className="app-card flex items-start gap-4">
+                  <CheckCircle className="mt-1 shrink-0 text-[#145f82]" size={24} />
+                  <p className="font-bold text-slate-800">{feature}</p>
                 </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-8 rounded-lg shadow-md">
-              <div className="flex items-start gap-4">
-                <CheckCircle className="text-green-500 flex-shrink-0" size={32} />
-                <div>
-                  <h3 className="text-xl font-semibold mb-2 text-gray-800">Member Profiles</h3>
-                  <p className="text-gray-600">
-                    Create your profile, track your club memberships, and manage your event registrations all in one place.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-8 rounded-lg shadow-md">
-              <div className="flex items-start gap-4">
-                <CheckCircle className="text-green-500 flex-shrink-0" size={32} />
-                <div>
-                  <h3 className="text-xl font-semibold mb-2 text-gray-800">Admin Tools</h3>
-                  <p className="text-gray-600">
-                    Club leaders can create and manage clubs, post events, track registrations, and engage with members.
-                  </p>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Statistics */}
-      <section className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12 text-gray-800">By The Numbers</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 text-center">
-            <div>
-              <div className="text-4xl font-bold text-blue-600 mb-2">500+</div>
-              <p className="text-gray-600">Active Clubs</p>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-blue-600 mb-2">10K+</div>
-              <p className="text-gray-600">Student Members</p>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-blue-600 mb-2">2K+</div>
-              <p className="text-gray-600">Events Hosted</p>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-blue-600 mb-2">50K+</div>
-              <p className="text-gray-600">Event Registrations</p>
+        <section className="page-section">
+          <div className="page-container">
+            <div className="grid gap-4 text-center sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ['500+', 'Active clubs'],
+                ['10K+', 'Student members'],
+                ['2K+', 'Events hosted'],
+                ['50K+', 'Registrations'],
+              ].map(([value, label]) => (
+                <div key={label} className="metric-card">
+                  <p className="text-4xl font-black text-[#145f82]">{value}</p>
+                  <p className="mt-2 font-bold text-slate-600">{label}</p>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Call to Action */}
-      <section className="bg-blue-600 text-white py-16">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-4">Join the Community Today</h2>
-          <p className="mb-8 text-blue-100 max-w-2xl mx-auto">
-            Start exploring clubs, attending events, and connecting with students who share your interests
-          </p>
-          <button
-            onClick={() => navigate('/login')}
-            className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition"
-          >
-            Get Started
-          </button>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-gray-800 text-white py-8">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="mb-4">&copy; 2026 Campus Clubs. All rights reserved.</p>
-          <div className="flex justify-center gap-6">
-            <button onClick={() => navigate('/')} className="hover:text-blue-400">Home</button>
-            <button onClick={() => navigate('/about')} className="hover:text-blue-400">About</button>
-            <button onClick={() => navigate('/contact')} className="hover:text-blue-400">Contact</button>
+        <section className="page-section pt-0">
+          <div className="page-container">
+            <div className="rounded-[2rem] bg-black p-8 text-center text-white sm:p-12">
+              <h2 className="text-3xl font-black sm:text-4xl">Join the community today.</h2>
+              <p className="mx-auto mt-4 max-w-2xl text-white/70">
+                Start exploring clubs, attending events, and connecting with students who share your interests.
+              </p>
+              <button onClick={() => navigate('/register')} className="mt-7 btn bg-white text-black hover:bg-[#e8f5fb]">
+                Get started
+              </button>
+            </div>
           </div>
-        </div>
-      </footer>
+        </section>
+      </main>
+
+      <Footer />
     </div>
   );
 };
