@@ -1,12 +1,37 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Users, X } from 'lucide-react';
 
 const JoinClubModal = ({ club, isOpen, onClose, onConfirm, loading }) => {
   const [agreed, setAgreed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    if (!isOpen) {
+      setAgreed(false);
+      setSubmitting(false);
+    }
+  }, [isOpen]);
+
+  const handleClose = () => {
+    if (loading || submitting) return;
+    onClose();
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (agreed) onConfirm();
+    if (!agreed || loading || submitting) return;
+
+    setSubmitting(true);
+
+    try {
+      const result = await Promise.resolve(onConfirm());
+      if (result !== false) {
+        setAgreed(false);
+        onClose();
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!isOpen || !club) return null;
@@ -19,13 +44,19 @@ const JoinClubModal = ({ club, isOpen, onClose, onConfirm, loading }) => {
             <p className="eyebrow mb-2">Membership</p>
             <h2 className="text-2xl font-black text-black">Join {club.clubName}</h2>
           </div>
-          <button type="button" onClick={onClose} className="btn-secondary px-3" aria-label="Close modal">
-            <X size={18} />
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={loading || submitting}
+            className="btn-secondary px-3 disabled:cursor-not-allowed"
+            aria-label="Close modal"
+          >
+            <X size={20} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5 p-6">
-          <div className="soft-panel">
+        <form onSubmit={handleSubmit} className="p-6">
+          <div className="soft-panel mb-6">
             <div className="mb-3 flex items-center gap-3">
               <span className="icon-tile">
                 <Users size={20} />
@@ -38,7 +69,7 @@ const JoinClubModal = ({ club, isOpen, onClose, onConfirm, loading }) => {
             <p className="text-sm leading-6 text-slate-600">{club.description}</p>
           </div>
 
-          <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-700">
+          <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-700 mb-5">
             <input
               type="checkbox"
               checked={agreed}
@@ -49,11 +80,20 @@ const JoinClubModal = ({ club, isOpen, onClose, onConfirm, loading }) => {
           </label>
 
           <div className="grid gap-3 border-t border-slate-200 pt-5 sm:grid-cols-2">
-            <button type="button" onClick={onClose} className="btn-secondary w-full">
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={loading || submitting}
+              className="btn-secondary w-full disabled:cursor-not-allowed"
+            >
               Cancel
             </button>
-            <button type="submit" disabled={loading || !agreed} className="btn-primary w-full">
-              {loading ? 'Joining...' : 'Join Club'}
+            <button
+              type="submit"
+              disabled={loading || submitting || !agreed}
+              className="btn-primary w-full disabled:cursor-not-allowed"
+            >
+              {loading || submitting ? 'Joining...' : 'Join Club'}
             </button>
           </div>
         </form>

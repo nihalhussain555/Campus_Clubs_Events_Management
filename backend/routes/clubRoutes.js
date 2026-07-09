@@ -24,5 +24,6 @@ router.delete('/:id', verifyToken, verifyAdmin, deleteClub);
 // Student routes
 router.post('/:id/join', verifyToken, joinClub);
 router.post('/:id/leave', verifyToken, leaveClub);
+router.delete('/:id/leave', verifyToken, leaveClub);
 
 export default router;

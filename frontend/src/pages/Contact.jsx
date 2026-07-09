@@ -37,7 +37,7 @@ const Contact = () => {
 
   const contactCards = [
     [Mail, 'Email', ['support@campusclubs.com', 'hello@campusclubs.com']],
-    [Phone, 'Phone', ['+1 (555) 123-4567', 'Mon - Fri, 9:00 AM - 5:00 PM']],
+    [Phone, 'Phone', ['+91 987654321', 'Mon - Fri, 9:00 AM - 5:00 PM']],
     [MapPin, 'Location', ['Campus Student Center', 'Room 101, Building A']],
   ];
 

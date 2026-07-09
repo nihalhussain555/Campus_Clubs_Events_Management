@@ -139,7 +139,7 @@ const Navbar = () => {
             </div>
           ) : (
             <button type="button" onClick={() => navigate('/login')} className="btn-primary">
-              Login
+              Login / SignUp
             </button>
           )}
         </div>

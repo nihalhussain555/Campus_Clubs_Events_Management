@@ -24,9 +24,22 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['student', 'admin'],
+    enum: ['student', 'admin', 'club_member', 'club_leader'],
     default: 'student'
   },
+  studentId: { type: String, trim: true },
+  personalEmail: { type: String, lowercase: true, trim: true },
+  department: { type: String, trim: true },
+  year: { type: String, trim: true },
+  semester: { type: String, trim: true },
+  course: { type: String, trim: true },
+  section: { type: String, trim: true },
+  bio: { type: String, trim: true, maxlength: 500 },
+  gender: { type: String, enum: ['Male', 'Female', 'Other', 'Prefer not to say'] },
+  dob: { type: Date },
+  phone: { type: String, trim: true },
+  address: { type: String, trim: true },
+  profilePic: { type: String },
   joinedClubs: [
     {
       type: mongoose.Schema.Types.ObjectId,

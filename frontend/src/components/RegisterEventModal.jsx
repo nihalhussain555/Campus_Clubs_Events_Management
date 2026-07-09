@@ -1,18 +1,32 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Calendar, MapPin, Users, X } from 'lucide-react';
 
 const RegisterEventModal = ({ event, isOpen, onClose, onConfirm, loading }) => {
-  const [formData, setFormData] = useState({
+  const initialFormData = {
     specialRequirements: '',
     dietaryRestrictions: '',
-  });
+  };
+
+  const [formData, setFormData] = useState(initialFormData);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData(initialFormData);
+    }
+  }, [isOpen]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleClose = () => {
+    if (loading) return;
+    onClose();
+  };
+
   const handleSubmit = (e) => {
+    if (loading) return;
     e.preventDefault();
     onConfirm(formData);
   };
@@ -36,7 +50,13 @@ const RegisterEventModal = ({ event, isOpen, onClose, onConfirm, loading }) => {
             <p className="eyebrow mb-2">Event registration</p>
             <h2 className="text-2xl font-black text-black">{event.title}</h2>
           </div>
-          <button type="button" onClick={onClose} className="btn-secondary px-3" aria-label="Close modal">
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={loading}
+            className="btn-secondary px-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Close modal"
+          >
             <X size={18} />
           </button>
         </div>
@@ -82,7 +102,12 @@ const RegisterEventModal = ({ event, isOpen, onClose, onConfirm, loading }) => {
           </div>
 
           <div className="grid gap-3 border-t border-slate-200 pt-5 sm:grid-cols-2">
-            <button type="button" onClick={onClose} className="btn-secondary w-full">
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={loading}
+              className="btn-secondary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               Cancel
             </button>
             <button type="submit" disabled={loading} className="btn-primary w-full">

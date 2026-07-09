@@ -68,33 +68,53 @@ const Register = () => {
 
         {error && <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="field-label flex items-center gap-2">
-              <User size={17} /> Full name
-            </label>
-            <input name="name" value={formData.name} onChange={handleChange} className="field" placeholder="Your name" />
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="field-label flex items-center gap-2">
+                <User size={17} /> Full name *
+              </label>
+              <input name="name" value={formData.name} onChange={handleChange} className="field" placeholder="Your name" required />
+            </div>
+            <div>
+              <label className="field-label flex items-center gap-2">
+                <Mail size={17} /> Email *
+              </label>
+              <input name="email" type="email" value={formData.email} onChange={handleChange} className="field" placeholder="your@email.com" required />
+            </div>
+            <div>
+              <label className="field-label flex items-center gap-2">
+                <Lock size={17} /> Password *
+              </label>
+              <input name="password" type="password" value={formData.password} onChange={handleChange} className="field" placeholder="Min 6 chars" required />
+            </div>
+            <div>
+              <label className="field-label">Role *</label>
+              <select name="role" value={formData.role} onChange={handleChange} className="field">
+                <option value="student">Student</option>
+                <option value="club_member">Club Member</option>
+                <option value="club_leader">Club Leader</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <label className="field-label">Student ID (Optional)</label>
+              <input name="studentId" value={formData.studentId || ''} onChange={handleChange} className="field" placeholder="STU2026..." />
+            </div>
+            <div>
+              <label className="field-label">Phone Number (Optional)</label>
+              <input name="phone" value={formData.phone || ''} onChange={handleChange} className="field" placeholder="+1 234..." />
+            </div>
+            <div>
+              <label className="field-label">Department (Optional)</label>
+              <input name="department" value={formData.department || ''} onChange={handleChange} className="field" placeholder="e.g. Computer Science" />
+            </div>
+            <div>
+              <label className="field-label">Course (Optional)</label>
+              <input name="course" value={formData.course || ''} onChange={handleChange} className="field" placeholder="e.g. B.Tech" />
+            </div>
           </div>
-          <div>
-            <label className="field-label flex items-center gap-2">
-              <Mail size={17} /> Email
-            </label>
-            <input name="email" type="email" value={formData.email} onChange={handleChange} className="field" placeholder="your@email.com" />
-          </div>
-          <div>
-            <label className="field-label flex items-center gap-2">
-              <Lock size={17} /> Password
-            </label>
-            <input name="password" type="password" value={formData.password} onChange={handleChange} className="field" placeholder="Minimum 6 characters" />
-          </div>
-          <div>
-            <label className="field-label">Role</label>
-            <select name="role" value={formData.role} onChange={handleChange} className="field">
-              <option value="student">Student</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <button type="submit" disabled={loading} className="btn-primary w-full">
+          <button type="submit" disabled={loading} className="btn-primary w-full mt-4">
             {loading ? 'Processing...' : 'Sign up'}
           </button>
         </form>

@@ -1,5 +1,5 @@
 import express from 'express';
-import { signup, login, getUserProfile, getAllUsers } from '../controllers/authController.js';
+import { signup, login, getUserProfile, getAllUsers, updateProfile } from '../controllers/authController.js';
 import { verifyToken, verifyAdmin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -10,6 +10,7 @@ router.post('/login', login);
 
 // Protected routes
 router.get('/profile', verifyToken, getUserProfile);
+router.put('/profile', verifyToken, updateProfile);
 router.get('/users', verifyToken, verifyAdmin, getAllUsers);
 
 export default router;

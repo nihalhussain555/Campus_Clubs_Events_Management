@@ -12,7 +12,10 @@ const generateToken = (id, role) => {
 // User Registration
 export const signup = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { 
+      name, email, password, role, 
+      studentId, department, course, phone 
+    } = req.body;
 
     // Validation
     if (!name || !email || !password) {
@@ -34,7 +37,11 @@ export const signup = async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role: role || 'student'
+      role: role || 'student',
+      studentId,
+      department,
+      course,
+      phone
     });
 
     await user.save();
@@ -114,6 +121,68 @@ export const getUserProfile = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        studentId: user.studentId,
+        personalEmail: user.personalEmail,
+        department: user.department,
+        year: user.year,
+        semester: user.semester,
+        course: user.course,
+        section: user.section,
+        bio: user.bio,
+        gender: user.gender,
+        dob: user.dob,
+        phone: user.phone,
+        address: user.address,
+        profilePic: user.profilePic,
+        joinedClubs: user.joinedClubs,
+        registeredEvents: user.registeredEvents
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Update User Profile
+export const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const updates = req.body;
+    
+    // Prevent sensitive fields from being updated directly via this route
+    delete updates.password;
+    delete updates.role;
+    delete updates.email;
+    
+    const user = await User.findByIdAndUpdate(userId, { $set: updates }, { new: true, runValidators: true })
+      .select('-password')
+      .populate('joinedClubs')
+      .populate('registeredEvents');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.status(200).json({
+      message: 'Profile updated successfully',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        studentId: user.studentId,
+        personalEmail: user.personalEmail,
+        department: user.department,
+        year: user.year,
+        semester: user.semester,
+        course: user.course,
+        section: user.section,
+        bio: user.bio,
+        gender: user.gender,
+        dob: user.dob,
+        phone: user.phone,
+        address: user.address,
+        profilePic: user.profilePic,
         joinedClubs: user.joinedClubs,
         registeredEvents: user.registeredEvents
       }

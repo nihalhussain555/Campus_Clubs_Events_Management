@@ -16,22 +16,33 @@ const Events = () => {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [registeringEvent, setRegisteringEvent] = useState(false);
+  const [actionLoadingIds, setActionLoadingIds] = useState([]);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     date: '',
     location: '',
     club: '',
-    capacity: 100,
+    capacity: 120,
   });
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   const fetchEvents = async () => {
     try {
       const response = await eventAPI.getAllEvents();
-      setEvents(response.data.events || []);
-      const userProfile = JSON.parse(localStorage.getItem('user') || '{}');
-      setRegisteredEventIds((userProfile.registeredEvents || []).map((event) => (typeof event === 'string' ? event : event._id)));
+      const fetchedEvents = response.data.events || [];
+      setEvents(fetchedEvents);
+      // derive registered event ids from fetched events for the current user
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const userId = currentUser?._id;
+      if (userId) {
+        const ids = fetchedEvents
+          .filter((ev) => (ev.registeredStudents || []).some((s) => (typeof s === 'string' ? s === userId : s._id === userId)))
+          .map((ev) => ev._id);
+        setRegisteredEventIds(ids);
+      } else {
+        setRegisteredEventIds([]);
+      }
     } catch (error) {
       setToast({ message: 'Error loading events', type: 'error' });
     } finally {
@@ -56,29 +67,35 @@ const Events = () => {
   const handleConfirmRegister = async () => {
     if (!selectedEvent) return;
 
+    if (registeringEvent || actionLoadingIds.includes(selectedEvent._id)) return;
     setRegisteringEvent(true);
+    setActionLoadingIds((ids) => [...ids, selectedEvent._id]);
     try {
       await eventAPI.registerForEvent(selectedEvent._id);
-      setRegisteredEventIds((ids) => [...ids, selectedEvent._id]);
       setToast({ message: 'Successfully registered for event', type: 'success' });
       setShowRegisterModal(false);
       setSelectedEvent(null);
-      fetchEvents();
+      await fetchEvents();
     } catch (error) {
       setToast({ message: error.response?.data?.message || 'Error registering for event', type: 'error' });
     } finally {
       setRegisteringEvent(false);
+      setActionLoadingIds((ids) => ids.filter((id) => id !== selectedEvent._1d && id !== selectedEvent._id));
     }
   };
 
   const handleUnregisterEvent = async (eventId) => {
+    if (!window.confirm('Are you sure you want to unregister from this event?')) return;
+    if (actionLoadingIds.includes(eventId)) return;
     try {
+      setActionLoadingIds((ids) => [...ids, eventId]);
       await eventAPI.unregisterFromEvent(eventId);
-      setRegisteredEventIds((ids) => ids.filter((id) => id !== eventId));
       setToast({ message: 'Successfully unregistered from event', type: 'success' });
-      fetchEvents();
+      await fetchEvents();
     } catch (error) {
       setToast({ message: 'Error unregistering from event', type: 'error' });
+    } finally {
+      setActionLoadingIds((ids) => ids.filter((id) => id !== eventId));
     }
   };
 

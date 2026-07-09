@@ -16,14 +16,21 @@ const Clubs = () => {
   const [selectedClub, setSelectedClub] = useState(null);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joiningClub, setJoiningClub] = useState(false);
+  const [leavingClubId, setLeavingClubId] = useState(null);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   const fetchClubs = async () => {
     try {
       const response = await clubAPI.getAllClubs();
-      setClubs(response.data.clubs || []);
-      const userProfile = JSON.parse(localStorage.getItem('user') || '{}');
-      setJoinedClubIds((userProfile.joinedClubs || []).map((club) => (typeof club === 'string' ? club : club._id)));
+      const clubsFromApi = response.data.clubs || [];
+      setClubs(clubsFromApi);
+      const joinedClubIdsFromResponse = response.data.joinedClubIds;
+      const joinedIds = Array.isArray(joinedClubIdsFromResponse)
+        ? joinedClubIdsFromResponse
+        : clubsFromApi
+            .filter((club) => club.isJoined || club.joined || club.joinedByUser)
+            .map((club) => club._id);
+      setJoinedClubIds(joinedIds);
     } catch (error) {
       setToast({ message: 'Error loading clubs', type: 'error' });
     } finally {
@@ -36,16 +43,15 @@ const Clubs = () => {
   }, []);
 
   const handleConfirmJoin = async () => {
-    if (!selectedClub) return;
+    if (!selectedClub || joiningClub) return;
 
     setJoiningClub(true);
     try {
       await clubAPI.joinClub(selectedClub._id);
-      setJoinedClubIds((ids) => [...ids, selectedClub._id]);
       setToast({ message: 'Successfully joined club', type: 'success' });
       setShowJoinModal(false);
       setSelectedClub(null);
-      fetchClubs();
+      await fetchClubs();
     } catch (error) {
       setToast({ message: error.response?.data?.message || 'Error joining club', type: 'error' });
     } finally {
@@ -54,13 +60,18 @@ const Clubs = () => {
   };
 
   const handleLeaveClub = async (clubId) => {
+    if (leavingClubId === clubId) return;
+    if (!window.confirm('Are you sure you want to leave this club?')) return;
+
+    setLeavingClubId(clubId);
     try {
       await clubAPI.leaveClub(clubId);
-      setJoinedClubIds((ids) => ids.filter((id) => id !== clubId));
       setToast({ message: 'Successfully left club', type: 'success' });
-      fetchClubs();
+      await fetchClubs();
     } catch (error) {
       setToast({ message: 'Error leaving club', type: 'error' });
+    } finally {
+      setLeavingClubId(null);
     }
   };
 
@@ -160,21 +171,29 @@ const Clubs = () => {
                       {club.members?.length || 0} members
                     </div>
                     <div className="flex gap-2">
-                      {joined ? (
-                        <button type="button" onClick={() => handleLeaveClub(club._id)} className="btn-danger flex-1">
-                          Leave
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedClub(club);
-                            setShowJoinModal(true);
-                          }}
-                          className="btn-primary flex-1"
-                        >
-                          Join
-                        </button>
+                      {user?.role !== 'admin' && (
+                        joined ? (
+                          <button
+                            type="button"
+                            onClick={() => handleLeaveClub(club._id)}
+                            className="btn-danger flex-1"
+                            disabled={leavingClubId === club._id}
+                          >
+                            Tap to Leave Club
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedClub(club);
+                              setShowJoinModal(true);
+                            }}
+                            className="btn-primary flex-1"
+                            disabled={joiningClub}
+                          >
+                            Join
+                          </button>
+                        )
                       )}
                       {user?.role === 'admin' && (
                         <button type="button" onClick={() => handleDeleteClub(club._id)} className="btn-secondary px-3" aria-label={`Delete ${club.clubName}`}>

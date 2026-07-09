@@ -36,11 +36,36 @@ api.interceptors.response.use(
   }
 );
 
+const extractData = (response) => (response.data !== undefined ? response.data : { success: true });
+
+const createDuplicateError = (error, message) => {
+  const duplicateError = new Error(message);
+  duplicateError.duplicate = true;
+  duplicateError.response = error.response;
+  duplicateError.request = error.request;
+  duplicateError.config = error.config;
+  duplicateError.originalError = error;
+  return duplicateError;
+};
+
+const handleDuplicateActionError = (error) => {
+  const status = error.response?.status;
+  const message = error.response?.data?.message || error.message || 'Duplicate action detected';
+  const isDuplicate = status === 409 || (status === 400 && /already|duplicate|exists/i.test(message));
+
+  if (isDuplicate) {
+    return Promise.reject(createDuplicateError(error, message));
+  }
+
+  return Promise.reject(error);
+};
+
 // Auth API calls
 export const authAPI = {
   signup: (data) => api.post('/auth/signup', data),
   login: (data) => api.post('/auth/login', data),
   getProfile: () => api.get('/auth/profile'),
+  updateProfile: (data) => api.put('/auth/profile', data),
   getAllUsers: () => api.get('/auth/users')
 };
 
@@ -51,8 +76,8 @@ export const clubAPI = {
   createClub: (data) => api.post('/clubs', data),
   updateClub: (id, data) => api.put(`/clubs/${id}`, data),
   deleteClub: (id) => api.delete(`/clubs/${id}`),
-  joinClub: (id) => api.post(`/clubs/${id}/join`),
-  leaveClub: (id) => api.post(`/clubs/${id}/leave`)
+  joinClub: (id) => api.post(`/clubs/${id}/join`).then(extractData).catch(handleDuplicateActionError),
+  leaveClub: (id) => api.post(`/clubs/${id}/leave`).then(extractData)
 };
 
 // Event API calls
@@ -64,8 +89,8 @@ export const eventAPI = {
   createEvent: (data) => api.post('/events', data),
   updateEvent: (id, data) => api.put(`/events/${id}`, data),
   deleteEvent: (id) => api.delete(`/events/${id}`),
-  registerForEvent: (id) => api.post(`/events/${id}/register`),
-  unregisterFromEvent: (id) => api.post(`/events/${id}/unregister`)
+  registerForEvent: (id) => api.post(`/events/${id}/register`).then(extractData).catch(handleDuplicateActionError),
+  unregisterFromEvent: (id) => api.post(`/events/${id}/unregister`).then(extractData)
 };
 
 export default api;
