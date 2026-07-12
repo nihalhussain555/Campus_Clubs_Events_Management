@@ -63,7 +63,7 @@ const JoinClubModal = ({ club, isOpen, onClose, onConfirm, loading }) => {
               </span>
               <div>
                 <h3 className="font-black text-black">{club.clubName}</h3>
-                <p className="text-sm font-semibold text-slate-500">{club.members?.length || 0} members</p>
+                <p className="text-sm font-semibold text-slate-500">{club.members?.length || 0} Members</p>
               </div>
             </div>
             <p className="text-sm leading-6 text-slate-600">{club.description}</p>
