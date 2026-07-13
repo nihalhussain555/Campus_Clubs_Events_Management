@@ -6,6 +6,15 @@ import Footer from '../components/Footer';
 
 const About = () => {
   const navigate = useNavigate();
+  
+  const handleGetStarted = () => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      navigate('/');
+    } else {
+      navigate('/register');
+    }
+  };
 
   const pillars = [
     ['Community building', 'Connect students with peers who share interests, goals, and creative energy.', Users],
@@ -106,7 +115,7 @@ const About = () => {
               <p className="mx-auto mt-4 max-w-2xl text-white/70">
                 Start exploring clubs, attending events, and connecting with students who share your interests.
               </p>
-              <button onClick={() => navigate('/register')} className="mt-7 btn bg-white text-black hover:bg-[#e8f5fb]">
+              <button onClick={handleGetStarted} className="mt-7 btn bg-white text-black hover:bg-[#e8f5fb]">
                 Get started
               </button>
             </div>

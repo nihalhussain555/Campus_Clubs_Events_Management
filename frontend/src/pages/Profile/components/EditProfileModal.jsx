@@ -29,6 +29,17 @@ const EditProfileModal = ({ user, onClose, onSave }) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, profilePic: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -71,18 +82,16 @@ const EditProfileModal = ({ user, onClose, onSave }) => {
                   className="w-20 h-20 rounded-full border-4 border-gray-50 object-cover shadow-sm bg-white"
                 />
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Upload Image</label>
                   <div className="flex items-center gap-2">
                     <input 
-                      type="url" 
-                      name="profilePic" 
-                      value={formData.profilePic} 
-                      onChange={handleChange} 
+                      type="file" 
+                      accept="image/*"
+                      onChange={handleImageUpload} 
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm" 
-                      placeholder="https://example.com/image.jpg"
                     />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">Provide a direct URL to an image file.</p>
+                  <p className="text-xs text-gray-500 mt-1">Select an image from your device.</p>
                 </div>
               </div>
             </div>

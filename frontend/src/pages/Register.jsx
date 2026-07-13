@@ -5,7 +5,7 @@ import { authAPI } from '../services/api';
 import Toast from '../components/Toast';
 
 const Register = () => {
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'student' });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'student', studentId: '', phone: '', department: '', course: '', gender: '', address: '', year: '', section: '', semester: '', dob: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showToast, setShowToast] = useState(false);
@@ -37,6 +37,16 @@ const Register = () => {
         email: formData.email.toLowerCase().trim(),
         password: formData.password,
         role: formData.role,
+        studentId: formData.studentId.trim(),
+        phone: formData.phone.trim(),
+        department: formData.department.trim(),
+        course: formData.course.trim(),
+        gender: formData.gender,
+        address: formData.address.trim(),
+        year: formData.year.trim(),
+        section: formData.section.trim(),
+        semester: formData.semester.trim(),
+        dob: formData.dob,
       });
       const { token, user } = response.data;
       localStorage.setItem('token', token);
@@ -92,9 +102,7 @@ const Register = () => {
               <label className="field-label">Role *</label>
               <select name="role" value={formData.role} onChange={handleChange} className="field">
                 <option value="student">Student</option>
-                <option value="club_member">Club Member</option>
                 <option value="club_leader">Club Leader</option>
-                <option value="admin">Admin</option>
               </select>
             </div>
             <div>
@@ -112,6 +120,36 @@ const Register = () => {
             <div>
               <label className="field-label">Course (Optional)</label>
               <input name="course" value={formData.course || ''} onChange={handleChange} className="field" placeholder="e.g. B.Tech" />
+            </div>
+            <div>
+              <label className="field-label">Gender</label>
+              <select name="gender" value={formData.gender || ''} onChange={handleChange} className="field bg-white">
+                <option value="">Select Gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+                <option value="Prefer not to say">Prefer not to say</option>
+              </select>
+            </div>
+            <div>
+              <label className="field-label">Date of Birth</label>
+              <input name="dob" type="date" value={formData.dob || ''} onChange={handleChange} className="field" />
+            </div>
+            <div>
+              <label className="field-label">Year (Optional)</label>
+              <input name="year" value={formData.year || ''} onChange={handleChange} className="field" placeholder="e.g. 3rd Year" />
+            </div>
+            <div>
+              <label className="field-label">Semester (Optional)</label>
+              <input name="semester" value={formData.semester || ''} onChange={handleChange} className="field" placeholder="e.g. 6th Semester" />
+            </div>
+            <div>
+              <label className="field-label">Section (Optional)</label>
+              <input name="section" value={formData.section || ''} onChange={handleChange} className="field" placeholder="e.g. A" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="field-label">Address (Optional)</label>
+              <input name="address" value={formData.address || ''} onChange={handleChange} className="field" placeholder="Your full address" />
             </div>
           </div>
           <button type="submit" disabled={loading} className="btn-primary w-full mt-4">

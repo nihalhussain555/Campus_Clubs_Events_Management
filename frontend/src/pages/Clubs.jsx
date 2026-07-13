@@ -24,12 +24,15 @@ const Clubs = () => {
       const response = await clubAPI.getAllClubs();
       const clubsFromApi = response.data.clubs || [];
       setClubs(clubsFromApi);
-      const joinedClubIdsFromResponse = response.data.joinedClubIds;
-      const joinedIds = Array.isArray(joinedClubIdsFromResponse)
-        ? joinedClubIdsFromResponse
-        : clubsFromApi
-            .filter((club) => club.isJoined || club.joined || club.joinedByUser)
-            .map((club) => club._id);
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const userId = currentUser?.id || currentUser?._id;
+      
+      const joinedIds = clubsFromApi
+        .filter((club) => 
+          (club.members || []).some(m => typeof m === 'string' ? m === userId : (m._id === userId || m.id === userId))
+        )
+        .map((club) => club._id);
+        
       setJoinedClubIds(joinedIds);
     } catch (error) {
       setToast({ message: 'Error loading clubs', type: 'error' });
@@ -170,16 +173,16 @@ const Clubs = () => {
                       <Users size={17} className="text-[#145f82]" />
                       {club.members?.length || 0} members
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2 mt-auto">
                       {user?.role !== 'admin' && (
                         joined ? (
                           <button
                             type="button"
                             onClick={() => handleLeaveClub(club._id)}
-                            className="btn-danger flex-1"
+                            className="btn-danger flex-1 whitespace-nowrap text-xs sm:text-sm px-2"
                             disabled={leavingClubId === club._id}
                           >
-                            Tap to Leave Club
+                            Tap to unjoin
                           </button>
                         ) : (
                           <button

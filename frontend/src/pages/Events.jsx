@@ -34,10 +34,10 @@ const Events = () => {
       setEvents(fetchedEvents);
       // derive registered event ids from fetched events for the current user
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-      const userId = currentUser?._id;
+      const userId = currentUser?.id || currentUser?._id;
       if (userId) {
         const ids = fetchedEvents
-          .filter((ev) => (ev.registeredStudents || []).some((s) => (typeof s === 'string' ? s === userId : s._id === userId)))
+          .filter((ev) => (ev.registeredStudents || []).some((s) => (typeof s === 'string' ? s === userId : (s._id === userId || s.id === userId))))
           .map((ev) => ev._id);
         setRegisteredEventIds(ids);
       } else {
@@ -233,10 +233,10 @@ const Events = () => {
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2 mt-auto">
                       {isRegistered ? (
-                        <button type="button" onClick={() => handleUnregisterEvent(event._id)} className="btn-danger flex-1">
-                          Unregister
+                        <button type="button" onClick={() => handleUnregisterEvent(event._id)} className="btn-danger flex-1 whitespace-nowrap text-xs sm:text-sm px-2">
+                          Tap to unregister
                         </button>
                       ) : (
                         <button

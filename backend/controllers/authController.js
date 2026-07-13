@@ -13,8 +13,9 @@ const generateToken = (id, role) => {
 export const signup = async (req, res) => {
   try {
     const { 
-      name, email, password, role, 
-      studentId, department, course, phone 
+      name, email, password,
+      studentId, department, course, phone,
+      gender, address, year, section, semester, dob
     } = req.body;
 
     // Validation
@@ -32,16 +33,22 @@ export const signup = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create new user
+    // Create new user — always force role to 'student' during public registration
     const user = new User({
       name,
       email,
       password: hashedPassword,
-      role: role || 'student',
+      role: 'student',
       studentId,
       department,
       course,
-      phone
+      phone,
+      gender,
+      address,
+      year,
+      section,
+      semester,
+      dob
     });
 
     await user.save();
@@ -56,7 +63,18 @@ export const signup = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        studentId: user.studentId,
+        department: user.department,
+        course: user.course,
+        phone: user.phone,
+        gender: user.gender,
+        address: user.address,
+        year: user.year,
+        section: user.section,
+        semester: user.semester,
+        dob: user.dob,
+        createdAt: user.createdAt
       }
     });
   } catch (error) {
@@ -135,7 +153,8 @@ export const getUserProfile = async (req, res) => {
         address: user.address,
         profilePic: user.profilePic,
         joinedClubs: user.joinedClubs,
-        registeredEvents: user.registeredEvents
+        registeredEvents: user.registeredEvents,
+        createdAt: user.createdAt
       }
     });
   } catch (error) {
@@ -184,9 +203,46 @@ export const updateProfile = async (req, res) => {
         address: user.address,
         profilePic: user.profilePic,
         joinedClubs: user.joinedClubs,
-        registeredEvents: user.registeredEvents
+        registeredEvents: user.registeredEvents,
+        createdAt: user.createdAt
       }
     });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Change Password
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Please provide current and new passwords' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters' });
+    }
+
+    // Find user with password field
+    const user = await User.findById(req.user.id).select('+password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Current password is incorrect' });
+    }
+
+    // Hash new password and save
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    res.status(200).json({ message: 'Password changed successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

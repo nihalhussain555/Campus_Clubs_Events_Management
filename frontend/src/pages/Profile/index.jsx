@@ -72,6 +72,10 @@ const ProfilePage = () => {
     }));
     setIsEditing(false);
     setToast({ message: 'Profile updated successfully!', type: 'success' });
+
+    // Persist to localStorage so other pages see updated data
+    const stored = JSON.parse(localStorage.getItem('user') || '{}');
+    localStorage.setItem('user', JSON.stringify({ ...stored, ...updatedUser }));
   };
 
   if (loading) return <LoadingSpinner message="Loading profile..." />;
