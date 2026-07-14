@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, MapPin, Phone, Send } from 'lucide-react';
+import { Mail, MapPin, Phone, Send, ChevronDown, ChevronUp } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import Toast from '../components/Toast';
@@ -8,6 +8,7 @@ const Contact = () => {
   const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
+  const [expandedFaq, setExpandedFaq] = useState(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -46,6 +47,9 @@ const Contact = () => {
     ['Can I create my own club?', 'Admins can create clubs from the admin tools. Contact campus staff to request admin access.'],
     ['How do I register for events?', 'Open Events, choose an event, and complete the registration confirmation.'],
     ['How can I update my profile?', 'Use the Profile page to edit your visible account information.'],
+    ['Can I join multiple clubs?','Yes, you can join multiple clubs unless your organization has specific restrictions.'],
+    ['Will I receive a participation certificate?','Certificates are issued for eligible events after attendance is verified.'],
+    ['How do I download my certificate?','You can download certificates from the My Certificates section once they become available.']
   ];
 
   return (
@@ -124,15 +128,29 @@ const Contact = () => {
           <div className="page-container">
             <div className="mb-8 text-center">
               <span className="eyebrow">FAQ</span>
-              <h2 className="section-title">Fast answers.</h2>
+              <h2 className="section-title">Frequently Asked Questions.</h2>
             </div>
             <div className="mx-auto grid max-w-4xl gap-4">
-              {faqs.map(([question, answer]) => (
-                <article key={question} className="app-card">
-                  <h3 className="font-black text-black">{question}</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{answer}</p>
-                </article>
-              ))}
+              {faqs.map(([question, answer], idx) => {
+                const isExpanded = expandedFaq === idx;
+                return (
+                  <article 
+                    key={question} 
+                    className="app-card cursor-pointer hover:bg-slate-50 transition-colors"
+                    onClick={() => setExpandedFaq(isExpanded ? null : idx)}
+                  >
+                    <div className="flex justify-between items-center gap-4">
+                      <h3 className="font-black text-black">{question}</h3>
+                      <span className="text-slate-400 shrink-0">
+                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                      </span>
+                    </div>
+                    {isExpanded && (
+                      <p className="mt-2 text-sm leading-6 text-slate-600">{answer}</p>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           </div>
         </section>

@@ -137,6 +137,14 @@ const Events = () => {
       minute: '2-digit',
     });
 
+  const currentDate = new Date();
+  const currentMonth = currentDate.getMonth();
+  const currentYear = currentDate.getFullYear();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
+  const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const blanksArray = Array.from({ length: firstDayOfMonth }, (_, i) => i);
+
   if (loading) return <LoadingSpinner message="Loading events..." />;
 
   return (
@@ -202,6 +210,38 @@ const Events = () => {
               </div>
             </form>
           )}
+
+          <div className="app-card mb-8 overflow-x-auto">
+            <h2 className="text-2xl font-black text-black mb-4 capitalize">
+              {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+            </h2>
+            <div className="min-w-[600px] grid grid-cols-7 gap-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                <div key={day} className="text-center text-sm font-bold text-slate-500 py-2">{day}</div>
+              ))}
+              {blanksArray.map(blank => (
+                <div key={`blank-${blank}`} className="min-h-[100px] p-2 rounded-xl bg-slate-50 border border-slate-100"></div>
+              ))}
+              {daysArray.map(day => {
+                const dayEvents = events.filter(e => {
+                  const d = new Date(e.date);
+                  return d.getDate() === day && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+                });
+                return (
+                  <div key={`day-${day}`} className={`min-h-[100px] p-2 rounded-xl bg-white border ${day === currentDate.getDate() ? 'border-[#145f82] ring-1 ring-[#145f82]' : 'border-slate-200'}`}>
+                    <div className={`text-sm font-bold ${day === currentDate.getDate() ? 'text-[#145f82]' : 'text-slate-700'}`}>{day}</div>
+                    <div className="mt-1 flex flex-col gap-1">
+                      {dayEvents.map(e => (
+                        <div key={`cal-event-${e._id}`} className="text-[10px] sm:text-xs p-1 rounded bg-[#eef8fc] text-[#145f82] truncate font-semibold" title={e.title}>
+                          {e.title}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
           {events.length > 0 ? (
             <div className="grid gap-5 lg:grid-cols-2">

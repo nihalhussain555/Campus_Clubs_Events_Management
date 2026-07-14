@@ -10,6 +10,7 @@ import Profile from './pages/Profile';
 import Home from './pages/Home';
 import About from './pages/About';
 import Contact from './pages/Contact';
+import Notifications from './pages/Notifications';
 
 function App() {
   return (
@@ -40,6 +41,12 @@ function App() {
         <Route path="/profile" element={
           <ProtectedRoute>
             <Profile />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/notifications" element={
+          <ProtectedRoute>
+            <Notifications />
           </ProtectedRoute>
         } />
 

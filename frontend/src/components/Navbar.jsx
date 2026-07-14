@@ -46,6 +46,7 @@ const Navbar = () => {
       ? [
           { to: '/clubs', label: 'Clubs' },
           { to: '/events', label: 'Events' },
+          { to: '/notifications', label: 'Notifications' },
           ...(user?.role === 'admin' ? [{ to: '/admin', label: 'Admin' }] : []),
         ]
       : []),
