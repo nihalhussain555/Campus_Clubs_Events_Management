@@ -134,7 +134,7 @@ const Clubs = () => {
             <form onSubmit={handleCreateClub} className="app-card mb-8 space-y-5">
               <h2 className="text-2xl font-black text-black">Create new club</h2>
               <div>
-                <label className="field-label">Club name</label>
+                <label className="field-label">Club Name</label>
                 <input
                   value={formData.clubName}
                   onChange={(e) => setFormData({ ...formData, clubName: e.target.value })}

@@ -60,7 +60,7 @@ const Notifications = () => {
     fetchNotifications();
   }, []);
 
-  if (loading) return <LoadingSpinner message="Loading notifications..." />;
+  if (loading) return <LoadingSpinner message="Loading Notifications..." />;
 
   return (
     <div className="app-page">
