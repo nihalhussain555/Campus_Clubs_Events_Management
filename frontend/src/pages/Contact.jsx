@@ -43,13 +43,13 @@ const Contact = () => {
   ];
 
   const faqs = [
-    ['Q1 How do I join a club?', 'Log in, open Clubs, and select Join on any club that matches your interests.'],
-    ['Q2 Can I create my own club?', 'Admins can create clubs from the admin tools. Contact campus staff to request admin access.'],
-    ['Q3 How do I register for events?', 'Open Events, choose an event, and complete the registration confirmation.'],
-    ['Q4 How can I update my profile?', 'Use the Profile page to edit your visible account information.'],
-    ['Q5 Can I join multiple clubs?','Yes, you can join multiple clubs unless your organization has specific restrictions.'],
-    ['Q6 Will I receive a participation certificate?','Certificates are issued for eligible events after attendance is verified.'],
-    ['Q7 How do I download my certificate?','You can download certificates from the My Certificates section once they become available.']
+    ['Q1. How do I join a club?', 'Log in, open Clubs, and select Join on any club that matches your interests.'],
+    ['Q2. Can I create my own club?', 'Admins can create clubs from the admin tools. Contact campus staff to request admin access.'],
+    ['Q3. How do I register for events?', 'Open Events, choose an event, and complete the registration confirmation.'],
+    ['Q4. How can I update my profile?', 'Use the Profile page to edit your visible account information.'],
+    ['Q5. Can I join multiple clubs?','Yes, you can join multiple clubs unless your organization has specific restrictions.'],
+    ['Q6. Will I receive a participation certificate?','Certificates are issued for eligible events after attendance is verified.'],
+    ['Q7. How do I download my certificate?','You can download certificates from the My Certificates section once they become available.']
   ];
 
   return (
