@@ -73,7 +73,7 @@ const Navbar = () => {
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#145f82] text-white">
             <Compass size={20} />
           </span>
-          <span className="text-lg font-black tracking-normal text-[#073c57]">Campus Clubs</span>
+          <span className="text-lg font-black tracking-normal text-[#073c57]">🎓Campus Clubs</span>
         </button>
 
         <nav className="hidden items-center gap-1 md:flex">

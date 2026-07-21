@@ -13,7 +13,7 @@ const generateToken = (id, role) => {
 export const signup = async (req, res) => {
   try {
     const { 
-      name, email, password,
+      name, email, password, role,
       studentId, department, course, phone,
       gender, address, year, section, semester, dob
     } = req.body;
@@ -33,23 +33,25 @@ export const signup = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create new user — always force role to 'student' during public registration
-    const user = new User({
+    const userData = {
       name,
       email,
       password: hashedPassword,
-      role: 'student',
+      role: role || 'student',
       studentId,
       department,
       course,
       phone,
-      gender,
       address,
       year,
       section,
-      semester,
-      dob
-    });
+      semester
+    };
+
+    if (gender) userData.gender = gender;
+    if (dob) userData.dob = dob;
+
+    const user = new User(userData);
 
     await user.save();
 

@@ -80,7 +80,7 @@ const Events = () => {
       setToast({ message: error.response?.data?.message || 'Error registering for event', type: 'error' });
     } finally {
       setRegisteringEvent(false);
-      setActionLoadingIds((ids) => ids.filter((id) => id !== selectedEvent._1d && id !== selectedEvent._id));
+      setActionLoadingIds((ids) => ids.filter((id) => id !== selectedEvent._id));
     }
   };
 
