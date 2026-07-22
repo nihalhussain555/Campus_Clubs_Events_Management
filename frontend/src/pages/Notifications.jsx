@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, Calendar, Users } from 'lucide-react';
+import { Bell, Calendar, Users, Info } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
-import { clubAPI, eventAPI } from '../services/api';
+import { clubAPI, eventAPI, notificationAPI } from '../services/api';
 
 const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
@@ -14,13 +14,15 @@ const Notifications = () => {
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const [eventsResponse, clubsResponse] = await Promise.all([
+        const [eventsResponse, clubsResponse, notificationsResponse] = await Promise.all([
           eventAPI.getAllEvents(),
           clubAPI.getAllClubs(),
+          notificationAPI.getAllNotifications(),
         ]);
 
         const events = eventsResponse.data.events || [];
         const clubs = clubsResponse.data.clubs || [];
+        const customNotifications = notificationsResponse.data.notifications || [];
 
         const now = new Date();
         const upcomingEvents = events
@@ -48,7 +50,19 @@ const Notifications = () => {
             icon: Users
           }));
 
-        const allNotifications = [...upcomingEvents, ...newClubs];
+        // Format custom notifications
+        const adminNotifications = customNotifications.map(n => ({
+          id: `custom-${n._id}`,
+          type: n.type,
+          title: n.title,
+          message: n.message,
+          date: new Date(n.createdAt),
+          icon: n.type === 'event' ? Calendar : (n.type === 'alert' ? Bell : Info)
+        }));
+
+        const allNotifications = [...adminNotifications, ...upcomingEvents, ...newClubs]
+          .sort((a, b) => b.date - a.date);
+          
         setNotifications(allNotifications);
       } catch (error) {
         setToast({ message: 'Error loading notifications', type: 'error' });
@@ -90,11 +104,9 @@ const Notifications = () => {
                       <div>
                         <h3 className="text-xl font-black text-black">{notif.title}</h3>
                         <p className="mt-1 text-sm leading-6 text-slate-600">{notif.message}</p>
-                        {notif.type === 'event' && (
-                          <span className="mt-2 inline-block text-xs font-bold text-slate-500">
-                            {notif.date.toLocaleString()}
-                          </span>
-                        )}
+                        <span className="mt-2 inline-block text-xs font-bold text-slate-500">
+                          {notif.date.toLocaleString()}
+                        </span>
                       </div>
                     </article>
                   );

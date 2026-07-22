@@ -94,4 +94,10 @@ export const eventAPI = {
   unregisterFromEvent: (id) => api.post(`/events/${id}/unregister`).then(extractData)
 };
 
+// Notification API calls
+export const notificationAPI = {
+  getAllNotifications: () => api.get('/notifications'),
+  createNotification: (data) => api.post('/notifications', data)
+};
+
 export default api;

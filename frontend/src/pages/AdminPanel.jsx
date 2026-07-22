@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Briefcase, Calendar, Shield, Trash2, Users } from 'lucide-react';
 import Navbar from '../components/Navbar';
-import { authAPI, clubAPI, eventAPI } from '../services/api';
+import { authAPI, clubAPI, eventAPI, notificationAPI } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
 
@@ -10,8 +10,11 @@ const AdminPanel = () => {
   const [users, setUsers] = useState([]);
   const [clubs, setClubs] = useState([]);
   const [events, setEvents] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  
+  const [newNotification, setNewNotification] = useState({ title: '', message: '', type: 'info' });
 
   const fetchAdminData = async () => {
     try {
@@ -34,6 +37,9 @@ const AdminPanel = () => {
       } else if (activeTab === 'users') {
         const usersRes = await authAPI.getAllUsers();
         setUsers(usersRes.data.users || []);
+      } else if (activeTab === 'notifications') {
+        const notificationsRes = await notificationAPI.getAllNotifications();
+        setNotifications(notificationsRes.data.notifications || []);
       }
     } catch (error) {
       setToast({ message: 'Error loading data', type: 'error' });
@@ -70,7 +76,19 @@ const AdminPanel = () => {
 
   if (loading) return <LoadingSpinner message="Loading admin panel..." />;
 
-  const tabs = ['dashboard', 'users', 'clubs', 'events'];
+  const handleCreateNotification = async (e) => {
+    e.preventDefault();
+    try {
+      await notificationAPI.createNotification(newNotification);
+      setToast({ message: 'Notification created successfully', type: 'success' });
+      setNewNotification({ title: '', message: '', type: 'info' });
+      fetchAdminData();
+    } catch (error) {
+      setToast({ message: 'Error creating notification', type: 'error' });
+    }
+  };
+
+  const tabs = ['dashboard', 'users', 'clubs', 'events', 'notifications'];
 
   return (
     <div className="app-page">
@@ -195,6 +213,73 @@ const AdminPanel = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {activeTab === 'notifications' && (
+            <div className="grid gap-8 lg:grid-cols-2">
+              <div className="app-card">
+                <h2 className="text-2xl font-black text-black mb-6">Create Notification</h2>
+                <form onSubmit={handleCreateNotification} className="flex flex-col gap-5">
+                  <div className="form-group">
+                    <label htmlFor="title" className="form-label">Title</label>
+                    <input
+                      id="title"
+                      type="text"
+                      required
+                      className="form-input"
+                      value={newNotification.title}
+                      onChange={(e) => setNewNotification({ ...newNotification, title: e.target.value })}
+                      placeholder="E.g., System Maintenance"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="type" className="form-label">Type</label>
+                    <select
+                      id="type"
+                      className="form-input"
+                      value={newNotification.type}
+                      onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value })}
+                    >
+                      <option value="info">Info</option>
+                      <option value="alert">Alert</option>
+                      <option value="event">Event</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="message" className="form-label">Message</label>
+                    <textarea
+                      id="message"
+                      required
+                      className="form-input min-h-[100px] resize-y"
+                      value={newNotification.message}
+                      onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
+                      placeholder="Message content..."
+                    />
+                  </div>
+                  <button type="submit" className="btn-primary w-full">Broadcast Notification</button>
+                </form>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <h2 className="text-2xl font-black text-black mb-2">Past Notifications</h2>
+                {notifications.length === 0 ? (
+                  <p className="text-slate-500">No notifications yet.</p>
+                ) : (
+                  notifications.map(notif => (
+                    <article key={notif._id} className="app-card">
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-bold text-black">{notif.title}</h3>
+                        <span className="chip capitalize text-xs">{notif.type}</span>
+                      </div>
+                      <p className="text-sm text-slate-600 leading-relaxed mb-3">{notif.message}</p>
+                      <span className="text-xs font-bold text-slate-400">
+                        {new Date(notif.createdAt).toLocaleString()}
+                      </span>
+                    </article>
+                  ))
+                )}
+              </div>
             </div>
           )}
         </div>
