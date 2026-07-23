@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { ChevronDown, Compass, LayoutDashboard, LogOut, Menu, User, X } from 'lucide-react';
+import { ChevronDown, Compass, LayoutDashboard, LogOut, Menu, User, X, Settings, FileText } from 'lucide-react';
 import api from '../services/api';
 
 const Navbar = () => {
@@ -114,6 +114,28 @@ const Navbar = () => {
                     <User size={16} />
                     Profile
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeMenu();
+                      navigate('/account-settings');
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-700 hover:bg-[#e8f5fb] hover:text-[#145f82]"
+                  >
+                    <Settings size={16} />
+                    Account & Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeMenu();
+                      navigate('/certificates');
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-700 hover:bg-[#e8f5fb] hover:text-[#145f82]"
+                  >
+                    <FileText size={16} />
+                    My Certificates
+                  </button>
                   {user?.role === 'admin' && (
                     <button
                       type="button"
@@ -169,6 +191,14 @@ const Navbar = () => {
                 <button type="button" onClick={() => { closeMenu(); navigate('/profile'); }} className="btn-secondary w-full">
                   <User size={16} />
                   {user.name.split(' ')[0]} profile
+                </button>
+                <button type="button" onClick={() => { closeMenu(); navigate('/account-settings'); }} className="btn-secondary w-full">
+                  <Settings size={16} />
+                  Account & Settings
+                </button>
+                <button type="button" onClick={() => { closeMenu(); navigate('/certificates'); }} className="btn-secondary w-full">
+                  <FileText size={16} />
+                  My Certificates
                 </button>
                 <button type="button" onClick={handleLogout} className="btn-secondary w-full">
                   <LogOut size={16} />

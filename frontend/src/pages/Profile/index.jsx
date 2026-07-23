@@ -8,8 +8,6 @@ import InfoSection from './components/InfoSection';
 import StatsDashboard from './components/StatsDashboard';
 import ClubsSection from './components/ClubsSection';
 import EventsSection from './components/EventsSection';
-import AchievementsSection from './components/AchievementsSection';
-import SettingsSection from './components/SettingsSection';
 import AdminSection from './components/AdminSection';
 import EditProfileModal from './components/EditProfileModal';
 import { Calendar, Activity, LogOut } from 'lucide-react';
@@ -163,8 +161,6 @@ const ProfilePage = () => {
             
             <ClubsSection user={user} />
             <EventsSection user={user} />
-            <AchievementsSection />
-            <SettingsSection />
             
             <div className="flex justify-end pt-4">
               <button className="flex items-center gap-2 px-6 py-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium">

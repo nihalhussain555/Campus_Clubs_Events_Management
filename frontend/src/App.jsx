@@ -7,6 +7,8 @@ import Clubs from './pages/Clubs';
 import Events from './pages/Events';
 import AdminPanel from './pages/AdminPanel';
 import Profile from './pages/Profile';
+import AccountSettings from './pages/AccountSettings';
+import Certificates from './pages/Certificates';
 import Home from './pages/Home';
 import About from './pages/About';
 import Contact from './pages/Contact';
@@ -41,6 +43,16 @@ function App() {
         <Route path="/profile" element={
           <ProtectedRoute>
             <Profile />
+          </ProtectedRoute>
+        } />
+        <Route path="/account-settings" element={
+          <ProtectedRoute>
+            <AccountSettings />
+          </ProtectedRoute>
+        } />
+        <Route path="/certificates" element={
+          <ProtectedRoute>
+            <Certificates />
           </ProtectedRoute>
         } />
 
