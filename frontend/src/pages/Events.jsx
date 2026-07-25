@@ -290,9 +290,31 @@ const Events = () => {
                   return d.getDate() === day && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
                 });
                 return (
-                  <div key={`day-${day}`} className={`min-h-[100px] p-2 rounded-xl bg-white border ${day === currentDate.getDate() ? 'border-[#145f82] ring-1 ring-[#145f82]' : 'border-slate-200'}`}>
+                  <div
+                      key={`day-${day}`}
+                      onClick={()=>setSelectedDate(day)}
+                      className={`cursor-pointer min-h-[100px] p-2 rounded-xl bg-white border ${
+                      day===today.getDate()
+                      ? 'border-[#145f82] ring-1 ring-[#145f82]'
+                      : 'border-slate-200'
+                      }`}
+                      >
                     <div className={`text-sm font-bold ${day === currentDate.getDate() ? 'text-[#145f82]' : 'text-slate-700'}`}>{day}</div>
                     <div className="mt-1 flex flex-col gap-1">
+                      {notes
+                        .filter(n =>
+                        n.day===day &&
+                        n.month===currentMonth &&
+                        n.year===currentYear
+                        )
+                        .map((note,index)=>(
+                        <div
+                        key={index}
+                        className="text-[10px] bg-yellow-200 rounded px-1 mt-1"
+                        >
+                        📝 {note.text}
+                        </div>
+                        ))}
                       {dayEvents.map(e => (
                         <div key={`cal-event-${e._id}`} className="text-[10px] sm:text-xs p-1 rounded bg-[#eef8fc] text-[#145f82] truncate font-semibold" title={e.title}>
                           {e.title}
@@ -403,6 +425,63 @@ const Events = () => {
           )}
         </div>
       </main>
+
+      {selectedDate && (
+
+        <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
+
+        <div className="bg-white rounded-xl p-6 w-[400px]">
+
+        <h2 className="text-xl font-bold mb-4">
+        Notes for {selectedDate}
+        </h2>
+
+        <textarea
+        className="field w-full"
+        rows="5"
+        value={noteText}
+        onChange={(e)=>setNoteText(e.target.value)}
+        placeholder="Write your notes..."
+        />
+
+        <div className="flex gap-3 mt-5">
+
+        <button
+        className="btn-primary"
+        onClick={()=>{
+
+        setNotes([
+        ...notes,
+        {
+        day:selectedDate,
+        month:currentMonth,
+        year:currentYear,
+        text:noteText
+        }
+        ]);
+
+        setNoteText("");
+        setSelectedDate(null);
+
+        }}
+        >
+        Save
+        </button>
+
+        <button
+        className="btn-secondary"
+        onClick={()=>setSelectedDate(null)}
+        >
+        Cancel
+        </button>
+
+        </div>
+
+        </div>
+
+        </div>
+
+        )}
 
       <RegisterEventModal
         event={selectedEvent}
