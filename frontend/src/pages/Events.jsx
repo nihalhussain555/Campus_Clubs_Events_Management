@@ -133,13 +133,20 @@ const Events = () => {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-      hour: '2-digit',
+      hour: '2-digit',  
       minute: '2-digit',
     });
 
-  const currentDate = new Date();
-  const currentMonth = currentDate.getMonth();
-  const currentYear = currentDate.getFullYear();
+  const today = new Date();
+
+  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
+  const [currentYear, setCurrentYear] = useState(today.getFullYear());
+
+  const currentDate = today;
+
+  const [notes, setNotes] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [noteText, setNoteText] = useState("");
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
   const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
@@ -212,9 +219,64 @@ const Events = () => {
           )}
 
           <div className="app-card mb-8 overflow-x-auto">
-            <h2 className="text-2xl font-black text-black mb-4 capitalize">
-              {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+
+          <button
+                onClick={()=>{
+                    if(currentMonth===0){
+                        setCurrentMonth(11);
+                        setCurrentYear(currentYear-1);
+                    }else{
+                        setCurrentMonth(currentMonth-1);
+                    }
+                }}
+                className="btn-secondary"
+            >
+                ◀
+            </button>
+
+            <div className="flex gap-2">
+
+                <select
+                    value={currentMonth}
+                    onChange={(e)=>setCurrentMonth(Number(e.target.value))}
+                    className="field"
+                >
+                    {[
+                        "January","February","March","April","May","June",
+                        "July","August","September","October","November","December"
+                    ].map((m,index)=>(
+                        <option key={index} value={index}>{m}</option>
+                    ))}
+                </select>
+
+                <select
+                    value={currentYear}
+                    onChange={(e)=>setCurrentYear(Number(e.target.value))}
+                    className="field"
+                >
+                    {Array.from({length:16},(_,i)=>2020+i).map(year=>(
+                        <option key={year}>{year}</option>
+                    ))}
+                </select>
+
+            </div>
+
+            <button
+                onClick={()=>{
+                    if(currentMonth===11){
+                        setCurrentMonth(0);
+                        setCurrentYear(currentYear+1);
+                    }else{
+                        setCurrentMonth(currentMonth+1);
+                    }
+                }}
+                className="btn-secondary"
+            >
+                ▶
+            </button>
+
+        </div>
             <div className="min-w-[600px] grid grid-cols-7 gap-2">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                 <div key={day} className="text-center text-sm font-bold text-slate-500 py-2">{day}</div>
