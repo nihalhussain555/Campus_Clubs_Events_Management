@@ -248,6 +248,27 @@ const Events = () => {
               {events.map((event) => {
                 const isRegistered = registeredEventIds.includes(event._id);
                 const isFull = (event.registeredStudents?.length || 0) >= event.capacity;
+                const eventDate = new Date(event.date);
+                          const now = new Date();
+
+                          let eventStatus = "Upcoming";
+
+                          // Admin can manually cancel an event
+                          if (event.status?.toLowerCase() === "cancelled") {
+                            eventStatus = "Cancelled";
+                          }
+                          // Event has already ended
+                          else if (eventDate < now) {
+                            eventStatus = "Finished";
+                          }
+                          // Event is currently happening
+                          else if (event.status?.toLowerCase() === "ongoing") {
+                            eventStatus = "Ongoing";
+                          }
+                          // Otherwise
+                          else {
+                            eventStatus = "Upcoming";
+                          }
                 return (
                   <article key={event._id} className="app-card app-card-hover">
                     <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -255,7 +276,19 @@ const Events = () => {
                         <h3 className="text-2xl font-black text-black">{event.title}</h3>
                         <p className="mt-2 text-sm leading-6 text-slate-600">{event.description}</p>
                       </div>
-                      <span className="chip capitalize">{event.status || 'upcoming'}</span>
+                      <span
+                        className={`chip ${
+                          eventStatus === "Finished"
+                            ? "bg-red-100 text-red-700 border border-red-200"
+                            : eventStatus === "Ongoing"
+                            ? "bg-yellow-100 text-yellow-700 border border-yellow-200"
+                            : eventStatus === "Cancelled"
+                            ? "bg-gray-100 text-gray-700 border border-gray-200"
+                            : "bg-green-100 text-green-700 border border-green-200"
+                        }`}
+                      >
+                        {eventStatus}
+                      </span>
                     </div>
 
                     <div className="mb-5 grid gap-3 text-sm font-bold text-slate-600">
