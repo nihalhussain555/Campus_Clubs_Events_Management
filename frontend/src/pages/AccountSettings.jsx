@@ -124,16 +124,32 @@ const AccountSettings = () => {
             />
           </div>
 
+          {/* Username */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Username
+          </label>
+          <input
+            type="text"
+            value={user.username || ""}
+            onChange={(e) => setUser({ ...user, username: e.target.value })}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+          />
+        </div>
           {/* Personal Email */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Personal Email</label>
-            <input
-              type="email"
-              value={user.personalEmail || ''}
-              onChange={e => setUser({ ...user, personalEmail: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            />
-          </div>
+         <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Email
+          </label>
+          <input
+            type="email"
+            value={user.email || ""}
+            onChange={(e) =>
+              setUser({ ...user, email: e.target.value })
+            }
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+          />
+        </div>
 
           {/* Phone Number */}
           <div>
@@ -337,6 +353,135 @@ const AccountSettings = () => {
           Update Password
         </button>
       </section>
+      {/* Notifications */}
+    <section className="bg-white rounded-xl shadow-sm p-6 space-y-6">
+      <h2 className="text-2xl font-semibold text-gray-800">
+        Notifications
+      </h2>
+
+      <div className="space-y-4">
+
+        <label className="flex items-center justify-between">
+          <span>Email Notifications</span>
+          <input
+            type="checkbox"
+            checked={user.emailNotifications || false}
+            onChange={(e)=>
+              setUser({
+                ...user,
+                emailNotifications:e.target.checked
+              })
+            }
+          />
+        </label>
+
+        <label className="flex items-center justify-between">
+          <span>SMS Notifications</span>
+          <input
+            type="checkbox"
+            checked={user.smsNotifications || false}
+            onChange={(e)=>
+              setUser({
+                ...user,
+                smsNotifications:e.target.checked
+              })
+            }
+          />
+        </label>
+
+        <label className="flex items-center justify-between">
+          <span>Push Notifications</span>
+          <input
+            type="checkbox"
+            checked={user.pushNotifications || false}
+            onChange={(e)=>
+              setUser({
+                ...user,
+                pushNotifications:e.target.checked
+              })
+            }
+          />
+        </label>
+
+        <label className="flex items-center justify-between">
+          <span>Event Reminders</span>
+          <input
+            type="checkbox"
+            checked={user.eventReminders || false}
+            onChange={(e)=>
+              setUser({
+                ...user,
+                eventReminders:e.target.checked
+              })
+            }
+          />
+        </label>
+
+        <label className="flex items-center justify-between">
+          <span>Membership Renewal Alerts</span>
+          <input
+            type="checkbox"
+            checked={user.membershipAlerts || false}
+            onChange={(e)=>
+              setUser({
+                ...user,
+                membershipAlerts:e.target.checked
+              })
+            }
+          />
+        </label>
+
+      </div>
+    </section>
+    {/* Membership & Billing */}
+    <section className="bg-white rounded-xl shadow-sm p-6 space-y-6">
+      <h2 className="text-2xl font-semibold text-gray-800">
+        Membership & Billing
+      </h2>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <div>
+          <label className="block text-sm font-medium">
+            Membership Status
+          </label>
+
+          <input
+            type="text"
+            value={user.membershipStatus || "Active"}
+            readOnly
+            className="mt-1 block w-full rounded-md bg-gray-100"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium">
+            Payment Method
+          </label>
+
+          <input
+            type="text"
+            value={user.paymentMethod || "Not Added"}
+            readOnly
+            className="mt-1 block w-full rounded-md bg-gray-100"
+          />
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium">
+            Billing History
+          </label>
+
+          <textarea
+            rows={4}
+            value={user.billingHistory || "No billing history"}
+            readOnly
+            className="mt-1 block w-full rounded-md bg-gray-100"
+          />
+        </div>
+
+      </div>
+    </section>
     </div>
   );
 };
