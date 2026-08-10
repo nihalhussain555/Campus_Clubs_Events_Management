@@ -4,6 +4,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
 
 import {
+  ArrowLeft,
   Save,
   RefreshCw,
   Eye,
@@ -189,6 +190,17 @@ const AccountSettings = () => {
 
         {/* PAGE HEADER */}
         <div className="mb-8">
+
+          {/* Back Button */}
+          <button
+            type="button"
+            onClick={() => window.history.back()}
+            className="inline-flex items-center gap-2 px-3.5 py-2 mb-5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all duration-200 text-sm font-medium shadow-sm"
+          >
+            <ArrowLeft size={17} />
+            Back
+          </button>
+
           <div className="flex items-center gap-3 mb-2">
             <div className="w-11 h-11 rounded-xl bg-indigo-100 flex items-center justify-center">
               <User
@@ -207,6 +219,7 @@ const AccountSettings = () => {
               </p>
             </div>
           </div>
+
         </div>
 
         {/* =====================================================
