@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { ChevronDown, Compass, LayoutDashboard, LogOut, Menu, User, X, Settings, FileText } from 'lucide-react';
+import { ChevronDown, Compass, LayoutDashboard, LogOut, Menu, User, X, Settings, FileText , GraduationCap} from 'lucide-react';
 import api from '../services/api';
 
 const Navbar = () => {
@@ -73,7 +73,21 @@ const Navbar = () => {
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#145f82] text-white">
             <Compass size={20} />
           </span>
-          <span className="text-lg font-black tracking-normal text-[#073c57]">🎓Campus Clubs</span>
+          <span className="text-lg font-black tracking-normal text-[#073c57]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center shadow-sm">
+                <GraduationCap
+                  size={22}
+                  strokeWidth={1.8}
+                  className="text-white"
+                />
+              </div>
+
+              <span className="text-lg font-extrabold tracking-tight text-slate-900">
+                Campus Clubs
+              </span>
+            </div>
+          </span>
         </button>
 
         <nav className="hidden items-center gap-1 md:flex">
