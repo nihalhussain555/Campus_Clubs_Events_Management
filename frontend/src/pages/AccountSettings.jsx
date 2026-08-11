@@ -3,6 +3,7 @@ import { authAPI } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
 import Navbar from "../components/Navbar";
+import LoadingScreen from '../components/LoadingScreen';
 
 import {
   ArrowLeft,
@@ -160,7 +161,7 @@ const AccountSettings = () => {
 
   if (loading) {
     return (
-      <LoadingSpinner message="Loading account settings..." />
+      <LoadingScreen message="Loading account settings..." />
     );
   }
 

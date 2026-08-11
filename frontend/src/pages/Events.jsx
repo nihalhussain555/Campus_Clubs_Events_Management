@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Calendar, MapPin, Plus, Trash2, Users } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { clubAPI, eventAPI } from '../services/api';
-import LoadingSpinner from '../components/LoadingSpinner';
+import LoadingScreen from '../components/LoadingScreen';
 import Toast from '../components/Toast';
 import RegisterEventModal from '../components/RegisterEventModal';
 
@@ -152,7 +152,7 @@ const Events = () => {
   const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
   const blanksArray = Array.from({ length: firstDayOfMonth }, (_, i) => i);
 
-  if (loading) return <LoadingSpinner message="Loading events..." />;
+  if (loading) return <LoadingScreen message="Loading events..." />;
 
   return (
     <div className="app-page">

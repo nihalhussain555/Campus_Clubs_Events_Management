@@ -1,10 +1,13 @@
 import React from "react";
 import Navbar from "../components/Navbar";
+import LoadingScreen from '../components/LoadingScreen';
 
 const Certificates = () => {
   return (
     <div className="app-page">
       <Navbar />
+
+      
 
       <main className="page-section">
         <div className="page-container">
@@ -12,7 +15,7 @@ const Certificates = () => {
 
           <div className="app-card mt-6 text-center py-16">
             <h2 className="text-2xl font-bold">🏆 No Certificates Yet</h2>
-
+            {/* if (loading) return <LoadingScreen message="Loading certificates..." />; */}
             <p className="mt-4 text-slate-500">
               Participate in events and successfully complete them to earn participation certificates.
             </p>

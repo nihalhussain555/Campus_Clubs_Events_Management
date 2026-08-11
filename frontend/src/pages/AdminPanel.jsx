@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Briefcase, Calendar, Shield, Trash2, Users } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { authAPI, clubAPI, eventAPI, notificationAPI } from '../services/api';
-import LoadingSpinner from '../components/LoadingSpinner';
+import LoadingScreen from '../components/LoadingScreen';
 import Toast from '../components/Toast';
 
 const AdminPanel = () => {
@@ -74,7 +74,7 @@ const AdminPanel = () => {
     }
   };
 
-  if (loading) return <LoadingSpinner message="Loading admin panel..." />;
+  if (loading) return <LoadingScreen message="Loading admin panel..." />;
 
   const handleCreateNotification = async (e) => {
     e.preventDefault();

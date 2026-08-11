@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Users } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { clubAPI } from '../services/api';
-import LoadingSpinner from '../components/LoadingSpinner';
+import LoadingScreen from '../components/LoadingScreen';
 import Toast from '../components/Toast';
 import JoinClubModal from '../components/JoinClubModal';
 
@@ -107,7 +107,7 @@ const Clubs = () => {
     }
   };
 
-  if (loading) return <LoadingSpinner message="Loading clubs..." />;
+  if (loading) return <LoadingScreen message="Loading clubs..." />;
 
   return (
     <div className="app-page">

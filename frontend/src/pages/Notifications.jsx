@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Bell, Calendar, Users, Info } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import LoadingSpinner from '../components/LoadingSpinner';
+import LoadingScreen from '../components/LoadingScreen';
 import Toast from '../components/Toast';
 import { clubAPI, eventAPI, notificationAPI } from '../services/api';
 
@@ -74,7 +74,7 @@ const Notifications = () => {
     fetchNotifications();
   }, []);
 
-  if (loading) return <LoadingSpinner message="Loading Notifications..." />;
+  if (loading) return <LoadingScreen message="Loading Notifications..." />;
 
   return (
     <div className="app-page">
