@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { authAPI } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
+import Navbar from "../components/Navbar";
 
 import {
   ArrowLeft,
@@ -13,20 +14,7 @@ import {
   User,
   ShieldCheck,
   Bell,
-  CreditCard,
-  Camera,
-  Mail,
-  Phone,
-  MapPin,
-  CalendarDays,
-  GraduationCap,
-  Building2,
-  Hash,
-  CheckCircle2,
-  Smartphone,
-  BellRing,
-  Megaphone,
-  RotateCcw
+  CreditCard,Camera,Mail,Phone,MapPin,CalendarDays,GraduationCap,Building2,Hash,CheckCircle2,Smartphone,BellRing,Megaphone,RotateCcw
 } from 'lucide-react';
 
 const AccountSettings = () => {
@@ -177,6 +165,8 @@ const AccountSettings = () => {
   }
 
   return (
+    <>
+      <Navbar />
     <div className="min-h-screen bg-slate-50">
       {toast && (
         <Toast
@@ -186,7 +176,7 @@ const AccountSettings = () => {
         />
       )}
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-8">
 
         {/* PAGE HEADER */}
         <div className="mb-8">
@@ -1176,6 +1166,7 @@ const AccountSettings = () => {
         `}
       </style>
     </div>
+    </>
   );
 };
 
