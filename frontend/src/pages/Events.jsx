@@ -17,14 +17,15 @@ const Events = () => {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [registeringEvent, setRegisteringEvent] = useState(false);
   const [actionLoadingIds, setActionLoadingIds] = useState([]);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    date: '',
-    location: '',
-    club: '',
-    capacity: 120,
-  });
+ const [formData, setFormData] = useState({
+  title: '',
+  description: '',
+  date: '',
+  endDate: '',
+  location: '',
+  club: '',
+  capacity: 120,
+});
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   const fetchEvents = async () => {
@@ -197,19 +198,92 @@ const Events = () => {
                 <label className="field-label">Description *</label>
                 <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="field min-h-28" placeholder="Describe the event" />
               </div>
-              <div className="grid gap-5 md:grid-cols-3">
+              <div className="grid gap-5 md:grid-cols-2">
+
+                {/* Start Date & Time */}
                 <div>
-                  <label className="field-label">Date and time *</label>
-                  <input type="datetime-local" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="field" />
+                  <label className="field-label">
+                    Start date & time *
+                  </label>
+
+                  <input
+                    type="datetime-local"
+                    value={formData.date}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        date: e.target.value
+                      })
+                    }
+                    className="field"
+                    required
+                  />
                 </div>
+
+                {/* End Date & Time */}
                 <div>
-                  <label className="field-label">Location</label>
-                  <input value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })} className="field" placeholder="Room 101" />
+                  <label className="field-label">
+                    End date & time *
+                  </label>
+
+                  <input
+                    type="datetime-local"
+                    value={formData.endDate}
+                    min={formData.date || undefined}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        endDate: e.target.value
+                      })
+                    }
+                    className="field"
+                    required
+                  />
                 </div>
+
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2 mt-5">
+
+                {/* Location */}
                 <div>
-                  <label className="field-label">Capacity</label>
-                  <input type="number" min="1" value={formData.capacity} onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })} className="field" />
+                  <label className="field-label">
+                    Location
+                  </label>
+
+                  <input
+                    value={formData.location}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        location: e.target.value
+                      })
+                    }
+                    className="field"
+                    placeholder="Room 101"
+                  />
                 </div>
+
+                {/* Capacity */}
+                <div>
+                  <label className="field-label">
+                    Capacity
+                  </label>
+
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.capacity}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        capacity: Number(e.target.value)
+                      })
+                    }
+                    className="field"
+                  />
+                </div>
+
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button type="submit" className="btn-primary">Create event</button>
