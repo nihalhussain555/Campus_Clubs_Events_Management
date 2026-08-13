@@ -1,21 +1,59 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { ChevronDown, Compass, LayoutDashboard, LogOut, Menu, User, X, Settings, FileText , GraduationCap} from 'lucide-react';
-import api from '../services/api';
+import {
+  Bell,
+  Compass,
+  ChevronDown,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  User,
+  X,
+  Settings,
+  FileText,
+  GraduationCap
+} from 'lucide-react';
+import api, { notificationAPI } from '../services/api';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   useEffect(() => {
     const onScroll = () => setIsScrolled(window.scrollY > 8);
+
     onScroll();
+
     window.addEventListener('scroll', onScroll);
+
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  useEffect(() => {
+    if (!user?.name) return;
+
+    const loadNotifications = async () => {
+      try {
+        const response = await notificationAPI.getAllNotifications();
+
+        setNotifications(
+          response.data?.notifications ||
+          response.data ||
+          []
+        );
+      } catch (error) {
+        console.error('Failed to load notifications:', error);
+        setNotifications([]);
+      }
+    };
+
+    loadNotifications();
+  }, [user?.name]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -46,7 +84,6 @@ const Navbar = () => {
       ? [
           { to: '/clubs', label: 'Clubs' },
           { to: '/events', label: 'Events' },
-          { to: '/notifications', label: 'Notifications' },
           ...(user?.role === 'admin' ? [{ to: '/admin', label: 'Admin' }] : []),
         ]
       : []),
@@ -97,7 +134,118 @@ const Navbar = () => {
             </NavLink>
           ))}
         </nav>
+        {/* Notification Bell */}
+{user?.name && (
+  <div className="relative">
+    <button
+      type="button"
+      onClick={() => {
+        setNotificationOpen((open) => !open);
+        setProfileOpen(false);
+      }}
+      className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition-all duration-200 hover:bg-slate-50 hover:text-black"
+      aria-label="Notifications"
+      aria-expanded={notificationOpen}
+    >
+      <Bell size={19} strokeWidth={2} />
 
+      {notifications.length > 0 && (
+        <span className="absolute right-1 top-1 flex h-2.5 w-2.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-60"></span>
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-white"></span>
+        </span>
+      )}
+    </button>
+
+    {/* Notification Popup */}
+    {notificationOpen && (
+      <div className="absolute right-0 top-12 z-50 w-[360px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.18)]">
+
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <h3 className="text-lg font-extrabold text-slate-900">
+              Notifications
+            </h3>
+
+            {notifications.length > 0 && (
+              <p className="mt-0.5 text-xs font-medium text-slate-500">
+                {notifications.length} notification
+                {notifications.length !== 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setNotificationOpen(false)}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Close notifications"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Notification List */}
+        <div className="max-h-[360px] overflow-y-auto">
+
+          {notifications.length > 0 ? (
+            notifications.map((notification, index) => (
+              <div
+                key={notification._id || notification.id || index}
+                className="flex gap-3 border-b border-slate-100 px-5 py-4 transition-colors hover:bg-slate-50"
+              >
+
+                {/* Icon */}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100">
+                  <Bell
+                    size={18}
+                    className="text-slate-700"
+                  />
+                </div>
+
+                {/* Content */}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold leading-5 text-slate-900">
+                    {notification.title || notification.message || 'New notification'}
+                  </p>
+
+                  {notification.description &&
+                    notification.description !== notification.message && (
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        {notification.description}
+                      </p>
+                    )}
+
+                  <p className="mt-1 text-xs font-medium text-slate-400">
+                    {notification.createdAt
+                      ? new Date(notification.createdAt).toLocaleDateString()
+                      : 'Recently'}
+                  </p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                <Bell size={22} className="text-slate-400" />
+              </div>
+
+              <p className="text-sm font-bold text-slate-700">
+                No notifications
+              </p>
+
+              <p className="mt-1 text-xs text-slate-400">
+                You're all caught up.
+              </p>
+            </div>
+          )}
+
+        </div>
+      </div>
+    )}
+  </div>
+)}
         <div className="hidden items-center gap-3 md:flex">
           {user?.name ? (
             <div className="relative">
