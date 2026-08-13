@@ -1,4 +1,5 @@
 import express from 'express';
+
 import {
   createEvent,
   getAllEvents,
@@ -8,25 +9,88 @@ import {
   deleteEvent,
   registerForEvent,
   unregisterFromEvent,
-  getUpcomingEvents
+  getUpcomingEvents,
+  getMyCertificates
 } from '../controllers/eventController.js';
-import { verifyToken, verifyAdmin } from '../middleware/authMiddleware.js';
+
+import {
+  verifyToken,
+  verifyAdmin
+} from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Public routes
+
+// =====================================================
+// PUBLIC ROUTES
+// =====================================================
+
 router.get('/', getAllEvents);
+
 router.get('/upcoming', getUpcomingEvents);
+
+
+// =====================================================
+// STUDENT CERTIFICATE ROUTE
+// IMPORTANT: keep this BEFORE /:id
+// =====================================================
+
+router.get(
+  '/certificates/my',
+  verifyToken,
+  getMyCertificates
+);
+
+
+// =====================================================
+// EVENT ROUTES
+// =====================================================
+
 router.get('/club/:clubId', getEventsByClub);
+
 router.get('/:id', getEventById);
 
-// Admin routes
-router.post('/', verifyToken, verifyAdmin, createEvent);
-router.put('/:id', verifyToken, verifyAdmin, updateEvent);
-router.delete('/:id', verifyToken, verifyAdmin, deleteEvent);
 
-// Student routes
-router.post('/:id/register', verifyToken, registerForEvent);
-router.post('/:id/unregister', verifyToken, unregisterFromEvent);
+// =====================================================
+// ADMIN ROUTES
+// =====================================================
+
+router.post(
+  '/',
+  verifyToken,
+  verifyAdmin,
+  createEvent
+);
+
+router.put(
+  '/:id',
+  verifyToken,
+  verifyAdmin,
+  updateEvent
+);
+
+router.delete(
+  '/:id',
+  verifyToken,
+  verifyAdmin,
+  deleteEvent
+);
+
+
+// =====================================================
+// STUDENT EVENT ACTIONS
+// =====================================================
+
+router.post(
+  '/:id/register',
+  verifyToken,
+  registerForEvent
+);
+
+router.post(
+  '/:id/unregister',
+  verifyToken,
+  unregisterFromEvent
+);
 
 export default router;
