@@ -6,6 +6,6 @@ const router = express.Router();
 
 router.route('/')
   .get(getNotifications)
-  .post(verifyAdmin, createNotification);
+  .post(verifyToken , verifyAdmin, createNotification);
 
 export default router;

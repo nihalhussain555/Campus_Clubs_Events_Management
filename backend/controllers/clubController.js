@@ -1,48 +1,72 @@
 import Club from '../models/Club.js';
 import User from '../models/User.js';
 
-// Create Club (Admin only)
+// =====================================================
+// CREATE CLUB - ADMIN ONLY
+// =====================================================
 export const createClub = async (req, res) => {
   try {
     const { clubName, description, category } = req.body;
 
-    if (!clubName || !description) {
-      return res.status(400).json({ message: 'Please provide club name and description' });
+    if (!clubName?.trim() || !description?.trim()) {
+      return res.status(400).json({
+        message: 'Please provide club name and description'
+      });
     }
 
     const club = new Club({
-      clubName,
-      description,
-      category: category || 'General',
+      clubName: clubName.trim(),
+      description: description.trim(),
+      category: category?.trim() || 'General',
       admin: req.user.id,
       members: [req.user.id]
     });
 
     await club.save();
 
+    const populatedClub = await Club.findById(club._id)
+      .populate('admin', 'name email')
+      .populate('members', 'name email');
+
     res.status(201).json({
       message: 'Club created successfully',
-      club
+      club: populatedClub
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Create club error:', error);
+
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
   }
 };
 
-// Get All Clubs
+// =====================================================
+// GET ALL CLUBS
+// =====================================================
 export const getAllClubs = async (req, res) => {
   try {
     const clubs = await Club.find()
       .populate('admin', 'name email')
       .populate('members', 'name email');
 
-    res.status(200).json({ clubs });
+    res.status(200).json({
+      clubs
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Get clubs error:', error);
+
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
   }
 };
 
-// Get Club by ID
+// =====================================================
+// GET CLUB BY ID
+// =====================================================
 export const getClubById = async (req, res) => {
   try {
     const club = await Club.findById(req.params.id)
@@ -50,111 +74,223 @@ export const getClubById = async (req, res) => {
       .populate('members', 'name email');
 
     if (!club) {
-      return res.status(404).json({ message: 'Club not found' });
+      return res.status(404).json({
+        message: 'Club not found'
+      });
     }
 
-    res.status(200).json({ club });
+    res.status(200).json({
+      club
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Get club error:', error);
+
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
   }
 };
 
-// Update Club (Admin only)
+// =====================================================
+// UPDATE CLUB - ADMIN ONLY
+// =====================================================
 export const updateClub = async (req, res) => {
   try {
     const { clubName, description, category } = req.body;
 
     const club = await Club.findById(req.params.id);
+
     if (!club) {
-      return res.status(404).json({ message: 'Club not found' });
+      return res.status(404).json({
+        message: 'Club not found'
+      });
     }
 
-    // Check if user is admin of this club or system admin
-    if (club.admin.toString() !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'Not authorized to update this club' });
+    if (
+      club.admin.toString() !== req.user.id &&
+      req.user.role !== 'admin'
+    ) {
+      return res.status(403).json({
+        message: 'Not authorized to update this club'
+      });
     }
 
-    if (clubName) club.clubName = clubName;
-    if (description) club.description = description;
-    if (category) club.category = category;
+    if (clubName?.trim()) {
+      club.clubName = clubName.trim();
+    }
+
+    if (description?.trim()) {
+      club.description = description.trim();
+    }
+
+    if (category?.trim()) {
+      club.category = category.trim();
+    }
 
     await club.save();
+
+    const updatedClub = await Club.findById(club._id)
+      .populate('admin', 'name email')
+      .populate('members', 'name email');
 
     res.status(200).json({
       message: 'Club updated successfully',
-      club
+      club: updatedClub
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Update club error:', error);
+
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
   }
 };
 
-// Delete Club (Admin only)
+// =====================================================
+// DELETE CLUB - ADMIN ONLY
+// =====================================================
 export const deleteClub = async (req, res) => {
   try {
     const club = await Club.findById(req.params.id);
+
     if (!club) {
-      return res.status(404).json({ message: 'Club not found' });
+      return res.status(404).json({
+        message: 'Club not found'
+      });
     }
 
-    // Check if user is admin of this club or system admin
-    if (club.admin.toString() !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'Not authorized to delete this club' });
+    if (
+      club.admin.toString() !== req.user.id &&
+      req.user.role !== 'admin'
+    ) {
+      return res.status(403).json({
+        message: 'Not authorized to delete this club'
+      });
     }
 
-    await Club.findByIdAndDelete(req.params.id);
+    // Remove club reference from all users
+    await User.updateMany(
+      {
+        joinedClubs: club._id
+      },
+      {
+        $pull: {
+          joinedClubs: club._id
+        }
+      }
+    );
 
-    res.status(200).json({ message: 'Club deleted successfully' });
+    // Delete club
+    await Club.findByIdAndDelete(club._id);
+
+    res.status(200).json({
+      message: 'Club deleted successfully'
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Delete club error:', error);
+
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
   }
 };
 
-// Join Club (Student)
+// =====================================================
+// JOIN CLUB
+// =====================================================
 export const joinClub = async (req, res) => {
   try {
     const club = await Club.findById(req.params.id);
+
     if (!club) {
-      return res.status(404).json({ message: 'Club not found' });
+      return res.status(404).json({
+        message: 'Club not found'
+      });
     }
 
-    // Check if already member
-    if (club.members.includes(req.user.id)) {
-      return res.status(400).json({ message: 'Already a member of this club' });
+    const alreadyMember = club.members.some(
+      (member) =>
+        member.toString() === req.user.id
+    );
+
+    if (alreadyMember) {
+      return res.status(409).json({
+        message: 'Already a member of this club'
+      });
     }
 
     club.members.push(req.user.id);
+
     await club.save();
 
-    const user = await User.findById(req.user.id);
-    user.joinedClubs.push(req.params.id);
-    await user.save();
+    await User.findByIdAndUpdate(
+      req.user.id,
+      {
+        $addToSet: {
+          joinedClubs: club._id
+        }
+      }
+    );
 
-    res.status(200).json({ message: 'Joined club successfully', club });
+    const updatedClub = await Club.findById(club._id)
+      .populate('admin', 'name email')
+      .populate('members', 'name email');
+
+    res.status(200).json({
+      message: 'Joined club successfully',
+      club: updatedClub
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Join club error:', error);
+
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
   }
 };
 
-// Leave Club (Student)
+// =====================================================
+// LEAVE CLUB
+// =====================================================
 export const leaveClub = async (req, res) => {
   try {
     const club = await Club.findById(req.params.id);
+
     if (!club) {
-      return res.status(404).json({ message: 'Club not found' });
+      return res.status(404).json({
+        message: 'Club not found'
+      });
     }
 
-    // Remove user from club members
-    club.members = club.members.filter(member => member.toString() !== req.user.id);
+    club.members = club.members.filter(
+      (member) =>
+        member.toString() !== req.user.id
+    );
+
     await club.save();
 
-    // Remove club from user's joinedClubs
-    const user = await User.findById(req.user.id);
-    user.joinedClubs = user.joinedClubs.filter(clubId => clubId.toString() !== req.params.id);
-    await user.save();
+    await User.findByIdAndUpdate(
+      req.user.id,
+      {
+        $pull: {
+          joinedClubs: club._id
+        }
+      }
+    );
 
-    res.status(200).json({ message: 'Left club successfully' });
+    res.status(200).json({
+      message: 'Left club successfully'
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Leave club error:', error);
+
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
   }
 };

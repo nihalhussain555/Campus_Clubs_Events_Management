@@ -52,6 +52,23 @@ const userSchema = new mongoose.Schema({
       ref: 'Event'
     }
   ],
+  certificates: [
+  {
+    event: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Event'
+    },
+    issuedAt: {
+      type: Date,
+      default: Date.now
+    },
+    certificateId: {
+      type: String,
+      unique: true,
+      sparse: true
+    }
+  }
+],
   createdAt: {
     type: Date,
     default: Date.now
