@@ -19,6 +19,11 @@ const eventSchema = new mongoose.Schema(
       required: [true, 'Please provide an event date']
     },
 
+    endDate: {
+      type: Date,
+      default: null
+    },
+
     location: {
       type: String,
       default: 'TBD',
@@ -37,7 +42,7 @@ const eventSchema = new mongoose.Schema(
       required: true
     },
 
-    // Students who registered for the event
+    // Students registered for the event
     registeredStudents: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -45,7 +50,7 @@ const eventSchema = new mongoose.Schema(
       }
     ],
 
-    // Students who actually participated/attended
+    // Students who actually attended
     participants: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -73,7 +78,6 @@ const eventSchema = new mongoose.Schema(
       default: 'upcoming'
     },
 
-    // Certificate settings
     certificateEnabled: {
       type: Boolean,
       default: true
@@ -82,11 +86,6 @@ const eventSchema = new mongoose.Schema(
     certificateIssuedAt: {
       type: Date,
       default: null
-    },
-
-    createdAt: {
-      type: Date,
-      default: Date.now
     }
   },
   {

@@ -161,37 +161,67 @@ export const clubAPI = {
 
 export const eventAPI = {
 
+  // Get all events
   getAllEvents: () =>
     api.get('/events'),
 
+  // Get event by ID
   getEventById: (id) =>
     api.get(`/events/${id}`),
 
+  // Get events by club
   getEventsByClub: (clubId) =>
     api.get(`/events/club/${clubId}`),
 
+  // Get upcoming events
   getUpcomingEvents: () =>
     api.get('/events/upcoming'),
 
+  // Create event - admin
   createEvent: (data) =>
     api.post('/events', data),
 
+  // Update event - admin
   updateEvent: (id, data) =>
     api.put(`/events/${id}`, data),
 
+  // Delete event - admin
   deleteEvent: (id) =>
     api.delete(`/events/${id}`),
 
+  // Register
   registerForEvent: (id) =>
     api
       .post(`/events/${id}/register`)
       .then(extractData)
       .catch(handleDuplicateActionError),
 
+  // Unregister
   unregisterFromEvent: (id) =>
     api
       .post(`/events/${id}/unregister`)
       .then(extractData),
+
+  // =================================================
+  // EVENT HISTORY
+  // =================================================
+
+  getMyEventHistory: () =>
+    api.get('/events/history/my'),
+
+  // =================================================
+  // ATTENDANCE - ADMIN
+  // =================================================
+
+  markAttendance: (eventId, userId) =>
+    api.post(`/events/${eventId}/attendance`, {
+      userId
+    }),
+
+  removeAttendance: (eventId, userId) =>
+    api.delete(`/events/${eventId}/attendance`, {
+      data: { userId }
+    }),
 
   // =================================================
   // CERTIFICATES
@@ -200,6 +230,7 @@ export const eventAPI = {
   getMyCertificates: () =>
     api.get('/events/certificates/my')
 };
+
 
 
 // =====================================================

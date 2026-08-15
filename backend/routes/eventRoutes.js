@@ -10,7 +10,10 @@ import {
   registerForEvent,
   unregisterFromEvent,
   getUpcomingEvents,
-  getMyCertificates
+  getMyCertificates,
+  getMyEventHistory,
+  markAttendance,
+  removeAttendance
 } from '../controllers/eventController.js';
 
 import {
@@ -22,7 +25,7 @@ const router = express.Router();
 
 
 // =====================================================
-// PUBLIC ROUTES
+// PUBLIC EVENT ROUTES
 // =====================================================
 
 router.get('/', getAllEvents);
@@ -31,8 +34,20 @@ router.get('/upcoming', getUpcomingEvents);
 
 
 // =====================================================
-// STUDENT CERTIFICATE ROUTE
-// IMPORTANT: keep this BEFORE /:id
+// STUDENT EVENT HISTORY
+// IMPORTANT: BEFORE /:id
+// =====================================================
+
+router.get(
+  '/history/my',
+  verifyToken,
+  getMyEventHistory
+);
+
+
+// =====================================================
+// STUDENT CERTIFICATES
+// IMPORTANT: BEFORE /:id
 // =====================================================
 
 router.get(
@@ -43,16 +58,46 @@ router.get(
 
 
 // =====================================================
-// EVENT ROUTES
+// CLUB EVENTS
 // =====================================================
 
-router.get('/club/:clubId', getEventsByClub);
-
-router.get('/:id', getEventById);
+router.get(
+  '/club/:clubId',
+  getEventsByClub
+);
 
 
 // =====================================================
-// ADMIN ROUTES
+// ADMIN ATTENDANCE
+// =====================================================
+
+router.post(
+  '/:id/attendance',
+  verifyToken,
+  verifyAdmin,
+  markAttendance
+);
+
+router.delete(
+  '/:id/attendance',
+  verifyToken,
+  verifyAdmin,
+  removeAttendance
+);
+
+
+// =====================================================
+// EVENT BY ID
+// =====================================================
+
+router.get(
+  '/:id',
+  getEventById
+);
+
+
+// =====================================================
+// ADMIN EVENT MANAGEMENT
 // =====================================================
 
 router.post(
@@ -78,7 +123,7 @@ router.delete(
 
 
 // =====================================================
-// STUDENT EVENT ACTIONS
+// STUDENT REGISTRATION
 // =====================================================
 
 router.post(
@@ -92,5 +137,6 @@ router.post(
   verifyToken,
   unregisterFromEvent
 );
+
 
 export default router;
