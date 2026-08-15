@@ -13,7 +13,7 @@ import {
   FileText,
   GraduationCap
 } from 'lucide-react';
-import api, { notificationAPI } from '../services/api';
+import api, { authAPI, notificationAPI } from '../services/api';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -22,7 +22,9 @@ const Navbar = () => {
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const [user, setUser] = useState(
+    JSON.parse(localStorage.getItem('user') || '{}')
+  );
 
   useEffect(() => {
     const onScroll = () => setIsScrolled(window.scrollY > 8);
@@ -54,6 +56,39 @@ const Navbar = () => {
 
     loadNotifications();
   }, [user?.name]);
+
+    useEffect(() => {
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      setUser({});
+      return;
+    }
+
+    const syncUser = async () => {
+      try {
+        const response = await authAPI.getProfile();
+
+        const currentUser = response.data?.user;
+
+        if (currentUser) {
+          setUser(currentUser);
+
+          localStorage.setItem(
+            'user',
+            JSON.stringify(currentUser)
+          );
+        }
+      } catch (error) {
+        console.error(
+          'Failed to sync user:',
+          error
+        );
+      }
+    };
+
+    syncUser();
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
