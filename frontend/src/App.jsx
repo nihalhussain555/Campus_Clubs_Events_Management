@@ -13,6 +13,7 @@ import Home from './pages/Home';
 import About from './pages/About';
 import Contact from './pages/Contact';
 import Notifications from './pages/Notifications';
+import Calendar from './pages/Calendar';
 
 function App() {
   return (
@@ -53,6 +54,12 @@ function App() {
         <Route path="/certificates" element={
           <ProtectedRoute>
             <Certificates />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/calendar" element={
+          <ProtectedRoute>
+            <Calendar />
           </ProtectedRoute>
         } />
 

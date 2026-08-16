@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { CalendarDays } from 'lucide-react';
 import {
   Bell,
   Compass,
@@ -111,18 +112,19 @@ const Navbar = () => {
         : 'text-slate-700 hover:bg-slate-100 hover:text-black'
     }`;
 
-  const links = [
-    { to: '/', label: 'Home' },
-    { to: '/about', label: 'About' },
-    { to: '/contact', label: 'Contact' },
-    ...(user?.name
-      ? [
-          { to: '/clubs', label: 'Clubs' },
-          { to: '/events', label: 'Events' },
-          ...(user?.role === 'admin' ? [{ to: '/admin', label: 'Admin' }] : []),
-        ]
-      : []),
-  ];
+const links = [
+  { to: '/', label: 'Home' },
+  { to: '/about', label: 'About' },
+  { to: '/contact', label: 'Contact' },
+  ...(user?.name
+    ? [
+        { to: '/clubs', label: 'Clubs' },
+        { to: '/events', label: 'Events' },
+        { to: '/calendar', label: 'Calendar' },
+        ...(user?.role === 'admin' ? [{ to: '/admin', label: 'Admin' }] : []),
+      ]
+    : []),
+];
 
   return (
     <header
