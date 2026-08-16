@@ -23,6 +23,16 @@ const Calendar = () => {
 
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
+  const [notes, setNotes] = useState(() => {
+    try {
+        return JSON.parse(localStorage.getItem('calendarNotes') || '[]');
+    } catch {
+        return [];
+    }
+    });
+
+const [selectedDate, setSelectedDate] = useState(null);
+const [noteText, setNoteText] = useState('');
 
   const monthNames = [
     'January',
@@ -63,7 +73,9 @@ const Calendar = () => {
 
     fetchEvents();
   }, []);
-
+useEffect(() => {
+    localStorage.setItem('calendarNotes', JSON.stringify(notes));
+    }, [notes]);
   // =====================================================
   // CALENDAR CALCULATIONS
   // =====================================================
@@ -373,6 +385,12 @@ const Calendar = () => {
 
               {daysArray.map((day) => {
 
+                const dayNotes = notes.filter(
+                    note =>
+                        note.day === day &&
+                        note.month === currentMonth &&
+                        note.year === currentYear
+                    );
                 const dayEvents = getEventsForDay(day);
 
                 return (
@@ -407,6 +425,28 @@ const Calendar = () => {
 
                     <div className="flex flex-col gap-1">
 
+                        {dayNotes.map((note) => (
+                            <div
+                                key={note.id}
+                                className="text-[10px] bg-yellow-100 text-yellow-800 rounded px-1 py-1"
+                            >
+                                📝 {note.text}
+
+                                <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+
+                                    setNotes((prev) =>
+                                    prev.filter((n) => n.id !== note.id)
+                                    );
+                                }}
+                                className="ml-1 text-red-500 font-bold"
+                                >
+                                ×
+                                </button>
+                            </div>
+                            ))}
                       {dayEvents.map((event) => {
 
                         const status = getEventStatus(event);
@@ -721,8 +761,53 @@ const Calendar = () => {
 
       )}
 
+      {selectedDate && (
+  <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
+    <div className="bg-white rounded-xl p-6 w-[400px] max-w-[90%]">
+
+      <h2 className="text-xl font-bold mb-4">
+        Add Note for {selectedDate}
+      </h2>
+
+      <textarea
+        className="field w-full"
+        rows="5"
+        value={noteText}
+        onChange={(e) => setNoteText(e.target.value)}
+        placeholder="Write your notes..."
+        autoFocus
+      />
+
+      <div className="flex gap-3 mt-5">
+
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={saveCalendarNote}
+        >
+          Save Note
+        </button>
+
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => {
+            setNoteText('');
+            setSelectedDate(null);
+          }}
+        >
+          Cancel
+        </button>
+
+      </div>
+
+    </div>
+  </div>
+)}
     </div>
   );
 };
+
+
 
 export default Calendar;
