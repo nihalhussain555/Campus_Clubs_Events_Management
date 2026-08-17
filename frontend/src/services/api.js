@@ -246,16 +246,23 @@ export const eventAPI = {
 
 
 
-// =====================================================
-// NOTIFICATION API
-// =====================================================
-
 export const notificationAPI = {
+
+  // Get logged-in user's notifications
   getAllNotifications: () =>
     api.get('/notifications'),
 
+  // Admin creates notification
   createNotification: (data) =>
-    api.post('/notifications', data)
+    api.post('/notifications', data),
+
+  // Mark one notification as read
+  markAsRead: (id) =>
+    api.put(`/notifications/${id}/read`),
+
+  // Mark all notifications as read
+  markAllAsRead: () =>
+    api.put('/notifications/read-all')
 };
 
 
