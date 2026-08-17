@@ -14,12 +14,13 @@ const eventSchema = new mongoose.Schema(
       trim: true
     },
 
+    // Event start date/time
     date: {
       type: Date,
       required: [true, 'Please provide an event start date']
     },
 
-    // NEW
+    // Event end date/time
     endDate: {
       type: Date,
       required: [true, 'Please provide an event end date']
@@ -43,7 +44,7 @@ const eventSchema = new mongoose.Schema(
       required: true
     },
 
-    // Students who registered
+    // Students registered for the event
     registeredStudents: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -59,7 +60,7 @@ const eventSchema = new mongoose.Schema(
       }
     ],
 
-    // Students whose certificates were generated
+    // Students who received certificates
     certificateRecipients: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -87,11 +88,6 @@ const eventSchema = new mongoose.Schema(
     certificateIssuedAt: {
       type: Date,
       default: null
-    },
-
-    createdAt: {
-      type: Date,
-      default: Date.now
     }
   },
   {

@@ -189,24 +189,30 @@ export const eventAPI = {
   deleteEvent: (id) =>
     api.delete(`/events/${id}`),
 
-  // Register
+  // =================================================
+  // REGISTRATION
+  // =================================================
+
   registerForEvent: (id) =>
     api
       .post(`/events/${id}/register`)
       .then(extractData)
       .catch(handleDuplicateActionError),
 
-  // Unregister
   unregisterFromEvent: (id) =>
     api
       .post(`/events/${id}/unregister`)
       .then(extractData),
 
-  // Attend event
-attendEvent: (id) =>
-  api
-    .post(`/events/${id}/attend`)
-    .then(extractData),
+  // =================================================
+  // STUDENT ATTENDANCE
+  // =================================================
+
+  attendEvent: (id) =>
+    api
+      .post(`/events/${id}/attend`)
+      .then(extractData),
+
   // =================================================
   // EVENT HISTORY
   // =================================================
@@ -215,7 +221,7 @@ attendEvent: (id) =>
     api.get('/events/history/my'),
 
   // =================================================
-  // ATTENDANCE - ADMIN
+  // ADMIN ATTENDANCE
   // =================================================
 
   markAttendance: (eventId, userId) =>
@@ -225,7 +231,9 @@ attendEvent: (id) =>
 
   removeAttendance: (eventId, userId) =>
     api.delete(`/events/${eventId}/attendance`, {
-      data: { userId }
+      data: {
+        userId
+      }
     }),
 
   // =================================================

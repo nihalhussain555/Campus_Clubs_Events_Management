@@ -11,7 +11,10 @@ import {
   unregisterFromEvent,
   attendEvent,
   getUpcomingEvents,
-  getMyCertificates
+  getMyEventHistory,
+  getMyCertificates,
+  markAttendance,
+  removeAttendance
 } from '../controllers/eventController.js';
 
 import {
@@ -64,28 +67,16 @@ router.get(
   getEventsByClub
 );
 
+
+// =====================================================
+// STUDENT ATTENDANCE
+// ALL AUTHENTICATED USERS
+// =====================================================
+
 router.post(
   '/:id/attend',
   verifyToken,
   attendEvent
-);
-
-// =====================================================
-// ADMIN ATTENDANCE
-// =====================================================
-
-router.post(
-  '/:id/attendance',
-  verifyToken,
-  verifyAdmin,
-  markAttendance
-);
-
-router.delete(
-  '/:id/attendance',
-  verifyToken,
-  verifyAdmin,
-  removeAttendance
 );
 
 
@@ -141,10 +132,24 @@ router.post(
   unregisterFromEvent
 );
 
+
+// =====================================================
+// ADMIN ATTENDANCE
+// =====================================================
+
 router.post(
-  '/:id/attend',
+  '/:id/attendance',
   verifyToken,
-  attendEvent
+  verifyAdmin,
+  markAttendance
 );
+
+router.delete(
+  '/:id/attendance',
+  verifyToken,
+  verifyAdmin,
+  removeAttendance
+);
+
 
 export default router;
