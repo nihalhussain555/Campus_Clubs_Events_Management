@@ -341,23 +341,12 @@ const Navbar = () => {
 
     ...(user?.name
       ? [
-          {
-            to: '/clubs',
-            label: 'Clubs'
-          },
-
-          {
-            to: '/events',
-            label: 'Events'
-          },
-          
+        { to: '/clubs', label: 'Clubs' },
+        { to: '/events', label: 'Events' },
         { to: '/calendar', label: 'Calendar' },
           ...(user?.role === 'admin'
             ? [
-                {
-                  to: '/admin',
-                  label: 'Admin'
-                }
+                { to: '/admin', label: 'Admin'}
               ]
             : [])
         ]
