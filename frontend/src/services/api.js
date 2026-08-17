@@ -202,6 +202,11 @@ export const eventAPI = {
       .post(`/events/${id}/unregister`)
       .then(extractData),
 
+  // Attend event
+attendEvent: (id) =>
+  api
+    .post(`/events/${id}/attend`)
+    .then(extractData),
   // =================================================
   // EVENT HISTORY
   // =================================================

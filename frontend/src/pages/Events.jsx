@@ -7,7 +7,8 @@ import {
   Users,
   Search,
   Filter,
-  X
+  CheckCircle,
+  Award
 } from 'lucide-react';
 
 import Navbar from '../components/Navbar';
@@ -17,31 +18,39 @@ import Toast from '../components/Toast';
 import RegisterEventModal from '../components/RegisterEventModal';
 
 const Events = () => {
+  // =====================================================
+  // STATE
+  // =====================================================
+
   const [events, setEvents] = useState([]);
   const [clubs, setClubs] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
   const [registeredEventIds, setRegisteredEventIds] = useState([]);
 
   const [showForm, setShowForm] = useState(false);
+
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
 
   const [registeringEvent, setRegisteringEvent] = useState(false);
+
   const [actionLoadingIds, setActionLoadingIds] = useState([]);
 
   // =====================================================
-  // PHASE 2 - SEARCH & FILTER
+  // SEARCH / FILTER STATE
   // =====================================================
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [clubFilter, setClubFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('all');
 
-  const [showFilters, setShowFilters] = useState(false);
+  // =====================================================
+  // CREATE EVENT FORM
+  // =====================================================
 
   const [formData, setFormData] = useState({
     title: '',
@@ -68,8 +77,10 @@ const Events = () => {
 
       setEvents(fetchedEvents);
 
-      const currentUser =
-        JSON.parse(localStorage.getItem('user') || '{}');
+      // Find registered events for current user
+      const currentUser = JSON.parse(
+        localStorage.getItem('user') || '{}'
+      );
 
       const userId = currentUser?.id || currentUser?._id;
 
@@ -77,12 +88,14 @@ const Events = () => {
         const ids = fetchedEvents
           .filter((event) =>
             (event.registeredStudents || []).some((student) => {
-              const studentId =
-                typeof student === 'string'
-                  ? student
-                  : student._id || student.id;
+              if (typeof student === 'string') {
+                return student === userId;
+              }
 
-              return studentId === userId;
+              return (
+                student?._id === userId ||
+                student?.id === userId
+              );
             })
           )
           .map((event) => event._id);
@@ -92,6 +105,8 @@ const Events = () => {
         setRegisteredEventIds([]);
       }
     } catch (error) {
+      console.error('Error loading events:', error);
+
       setToast({
         message: 'Error loading events',
         type: 'error'
@@ -111,9 +126,15 @@ const Events = () => {
 
       setClubs(response.data.clubs || []);
     } catch (error) {
+      console.error('Error loading clubs:', error);
+
       setClubs([]);
     }
   };
+
+  // =====================================================
+  // INITIAL LOAD
+  // =====================================================
 
   useEffect(() => {
     fetchEvents();
@@ -121,31 +142,41 @@ const Events = () => {
   }, []);
 
   // =====================================================
-  // EVENT STATUS
+  // GET EVENT STATUS
   // =====================================================
 
   const getEventStatus = (event) => {
     const now = new Date();
-    const start = new Date(event.date);
 
-    const end = event.endDate
+    const startTime = new Date(event.date);
+
+    /*
+      IMPORTANT:
+      endDate must exist in the event.
+    */
+
+    const endTime = event.endDate
       ? new Date(event.endDate)
-      : start;
+      : new Date(startTime.getTime() + 60 * 60 * 1000);
 
-    if (event.status === 'cancelled') {
+    // Admin manually cancelled
+    if (event.status?.toLowerCase() === 'cancelled') {
       return 'Cancelled';
     }
 
-    if (event.status === 'completed') {
-      return 'Completed';
+    // Before start
+    if (now < startTime) {
+      return 'Upcoming';
     }
 
-    if (now >= start && now <= end) {
+    // Between start and end
+    if (now >= startTime && now <= endTime) {
       return 'Ongoing';
     }
 
-    if (now > end) {
-      return 'Completed';
+    // After end
+    if (now > endTime) {
+      return 'Finished';
     }
 
     return 'Upcoming';
@@ -155,11 +186,19 @@ const Events = () => {
   // SEARCH + FILTER
   // =====================================================
 
+  const categories = useMemo(() => {
+    const uniqueCategories = events
+      .map((event) => event.category)
+      .filter(Boolean);
+
+    return ['all', ...new Set(uniqueCategories)];
+  }, [events]);
+
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
       const status = getEventStatus(event);
 
-      const search = searchTerm.toLowerCase().trim();
+      const search = searchTerm.trim().toLowerCase();
 
       const matchesSearch =
         !search ||
@@ -179,42 +218,13 @@ const Events = () => {
 
       const matchesStatus =
         statusFilter === 'all' ||
-        status.toLowerCase() === statusFilter;
-
-      let matchesDate = true;
-
-      const eventDate = new Date(event.date);
-      const today = new Date();
-
-      if (dateFilter === 'today') {
-        matchesDate =
-          eventDate.toDateString() === today.toDateString();
-      }
-
-      if (dateFilter === 'week') {
-        const weekFromNow = new Date();
-
-        weekFromNow.setDate(
-          today.getDate() + 7
-        );
-
-        matchesDate =
-          eventDate >= today &&
-          eventDate <= weekFromNow;
-      }
-
-      if (dateFilter === 'month') {
-        matchesDate =
-          eventDate.getMonth() === today.getMonth() &&
-          eventDate.getFullYear() === today.getFullYear();
-      }
+        status === statusFilter;
 
       return (
         matchesSearch &&
         matchesCategory &&
         matchesClub &&
-        matchesStatus &&
-        matchesDate
+        matchesStatus
       );
     });
   }, [
@@ -222,28 +232,18 @@ const Events = () => {
     searchTerm,
     categoryFilter,
     clubFilter,
-    statusFilter,
-    dateFilter
+    statusFilter
   ]);
 
   // =====================================================
-  // FILTER OPTIONS
+  // CLEAR FILTERS
   // =====================================================
-
-  const categories = [
-    ...new Set(
-      events
-        .map((event) => event.category)
-        .filter(Boolean)
-    )
-  ];
 
   const clearFilters = () => {
     setSearchTerm('');
     setCategoryFilter('all');
     setClubFilter('all');
     setStatusFilter('all');
-    setDateFilter('all');
   };
 
   // =====================================================
@@ -314,17 +314,16 @@ const Events = () => {
       return;
     }
 
-    setActionLoadingIds((ids) => [
-      ...ids,
-      eventId
-    ]);
-
     try {
+      setActionLoadingIds((ids) => [
+        ...ids,
+        eventId
+      ]);
+
       await eventAPI.unregisterFromEvent(eventId);
 
       setToast({
-        message:
-          'Successfully unregistered from event',
+        message: 'Successfully unregistered from event',
         type: 'success'
       });
 
@@ -334,6 +333,52 @@ const Events = () => {
         message:
           error.response?.data?.message ||
           'Error unregistering from event',
+        type: 'error'
+      });
+    } finally {
+      setActionLoadingIds((ids) =>
+        ids.filter((id) => id !== eventId)
+      );
+    }
+  };
+
+  // =====================================================
+  // ATTEND EVENT
+  // =====================================================
+
+  const handleAttendEvent = async (eventId) => {
+    if (actionLoadingIds.includes(eventId)) {
+      return;
+    }
+
+    try {
+      setActionLoadingIds((ids) => [
+        ...ids,
+        eventId
+      ]);
+
+      /*
+        Backend should:
+        1. Verify student is registered
+        2. Verify event is currently ongoing
+        3. Add student to participants
+        4. Generate/enable certificate
+      */
+
+      await eventAPI.attendEvent(eventId);
+
+      setToast({
+        message:
+          'Attendance marked successfully. Your certificate is now available.',
+        type: 'success'
+      });
+
+      await fetchEvents();
+    } catch (error) {
+      setToast({
+        message:
+          error.response?.data?.message ||
+          'Unable to mark attendance',
         type: 'error'
       });
     } finally {
@@ -354,25 +399,24 @@ const Events = () => {
       !formData.title ||
       !formData.description ||
       !formData.date ||
+      !formData.endDate ||
       !formData.club
     ) {
       setToast({
-        message:
-          'Please fill all required fields',
+        message: 'Please fill all required fields',
         type: 'error'
       });
 
       return;
     }
 
-    if (
-      formData.endDate &&
-      new Date(formData.endDate) <
-        new Date(formData.date)
-    ) {
+    const startDate = new Date(formData.date);
+    const endDate = new Date(formData.endDate);
+
+    if (endDate <= startDate) {
       setToast({
         message:
-          'End date cannot be before start date',
+          'End date and time must be after start date and time',
         type: 'error'
       });
 
@@ -380,11 +424,19 @@ const Events = () => {
     }
 
     try {
-      await eventAPI.createEvent(formData);
+      await eventAPI.createEvent({
+        title: formData.title,
+        description: formData.description,
+        date: formData.date,
+        endDate: formData.endDate,
+        location: formData.location,
+        club: formData.club,
+        capacity: Number(formData.capacity),
+        category: formData.category
+      });
 
       setToast({
-        message:
-          'Event created successfully',
+        message: 'Event created successfully',
         type: 'success'
       });
 
@@ -429,8 +481,7 @@ const Events = () => {
       await eventAPI.deleteEvent(eventId);
 
       setToast({
-        message:
-          'Event deleted successfully',
+        message: 'Event deleted successfully',
         type: 'success'
       });
 
@@ -449,8 +500,12 @@ const Events = () => {
   // FORMAT DATE
   // =====================================================
 
-  const formatDate = (dateString) =>
-    new Date(dateString).toLocaleString(
+  const formatDate = (dateString) => {
+    if (!dateString) {
+      return 'TBD';
+    }
+
+    return new Date(dateString).toLocaleString(
       'en-US',
       {
         month: 'short',
@@ -460,6 +515,7 @@ const Events = () => {
         minute: '2-digit'
       }
     );
+  };
 
   // =====================================================
   // LOADING
@@ -470,6 +526,10 @@ const Events = () => {
       <LoadingScreen message="Loading events..." />
     );
   }
+
+  // =====================================================
+  // UI
+  // =====================================================
 
   return (
     <div className="app-page">
@@ -495,7 +555,6 @@ const Events = () => {
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
 
             <div>
-
               <span className="eyebrow">
                 Campus calendar
               </span>
@@ -505,9 +564,9 @@ const Events = () => {
               </h1>
 
               <p className="section-copy mt-4">
-                Search, filter and register for campus events.
+                Register for activities, attend ongoing
+                events and track your event history.
               </p>
-
             </div>
 
             {user?.role === 'admin' && (
@@ -525,401 +584,189 @@ const Events = () => {
 
           </div>
 
-
-          {/* =================================================
-              SEARCH
-          ================================================= */}
-
-          <div className="app-card mb-6">
-
-            <div className="flex flex-col gap-4 lg:flex-row">
-
-              <div className="relative flex-1">
-
-                <Search
-                  size={19}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                />
-
-                <input
-                  value={searchTerm}
-                  onChange={(e) =>
-                    setSearchTerm(e.target.value)
-                  }
-                  className="field pl-11"
-                  placeholder="Search events, clubs, categories or locations..."
-                />
-
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowFilters((value) => !value)
-                }
-                className="btn-secondary"
-              >
-                <Filter size={18} />
-                Filters
-              </button>
-
-            </div>
-
-
-            {/* FILTERS */}
-
-            {showFilters && (
-              <div className="mt-5 grid gap-4 border-t border-slate-200 pt-5 sm:grid-cols-2 lg:grid-cols-4">
-
-                <div>
-
-                  <label className="field-label">
-                    Category
-                  </label>
-
-                  <select
-                    value={categoryFilter}
-                    onChange={(e) =>
-                      setCategoryFilter(e.target.value)
-                    }
-                    className="field"
-                  >
-                    <option value="all">
-                      All categories
-                    </option>
-
-                    {categories.map((category) => (
-                      <option
-                        key={category}
-                        value={category}
-                      >
-                        {category}
-                      </option>
-                    ))}
-
-                  </select>
-
-                </div>
-
-
-                <div>
-
-                  <label className="field-label">
-                    Club
-                  </label>
-
-                  <select
-                    value={clubFilter}
-                    onChange={(e) =>
-                      setClubFilter(e.target.value)
-                    }
-                    className="field"
-                  >
-
-                    <option value="all">
-                      All clubs
-                    </option>
-
-                    {clubs.map((club) => (
-                      <option
-                        key={club._id}
-                        value={club._id}
-                      >
-                        {club.clubName}
-                      </option>
-                    ))}
-
-                  </select>
-
-                </div>
-
-
-                <div>
-
-                  <label className="field-label">
-                    Status
-                  </label>
-
-                  <select
-                    value={statusFilter}
-                    onChange={(e) =>
-                      setStatusFilter(e.target.value)
-                    }
-                    className="field"
-                  >
-
-                    <option value="all">
-                      All statuses
-                    </option>
-
-                    <option value="upcoming">
-                      Upcoming
-                    </option>
-
-                    <option value="ongoing">
-                      Ongoing
-                    </option>
-
-                    <option value="completed">
-                      Completed
-                    </option>
-
-                    <option value="cancelled">
-                      Cancelled
-                    </option>
-
-                  </select>
-
-                </div>
-
-
-                <div>
-
-                  <label className="field-label">
-                    Date
-                  </label>
-
-                  <select
-                    value={dateFilter}
-                    onChange={(e) =>
-                      setDateFilter(e.target.value)
-                    }
-                    className="field"
-                  >
-
-                    <option value="all">
-                      Any date
-                    </option>
-
-                    <option value="today">
-                      Today
-                    </option>
-
-                    <option value="week">
-                      Next 7 days
-                    </option>
-
-                    <option value="month">
-                      This month
-                    </option>
-
-                  </select>
-
-                </div>
-
-
-                <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
-
-                  <button
-                    type="button"
-                    onClick={clearFilters}
-                    className="btn-secondary"
-                  >
-                    <X size={17} />
-                    Clear filters
-                  </button>
-
-                </div>
-
-              </div>
-            )}
-
-          </div>
-
-
-          {/* RESULT COUNT */}
-
-          <div className="mb-5 flex items-center justify-between">
-
-            <p className="text-sm font-bold text-slate-500">
-
-              Showing{' '}
-              <span className="text-slate-900">
-                {filteredEvents.length}
-              </span>{' '}
-              of{' '}
-              <span className="text-slate-900">
-                {events.length}
-              </span>{' '}
-              events
-
-            </p>
-
-          </div>
-
-
           {/* =================================================
               CREATE EVENT
           ================================================= */}
 
-          {showForm && user?.role === 'admin' && (
+          {showForm &&
+            user?.role === 'admin' && (
+              <form
+                onSubmit={handleCreateEvent}
+                className="app-card mb-8 space-y-5"
+              >
 
-            <form
-              onSubmit={handleCreateEvent}
-              className="app-card mb-8 space-y-5"
-            >
+                <h2 className="text-2xl font-black text-black">
+                  Create new event
+                </h2>
 
-              <h2 className="text-2xl font-black text-black">
-                Create new event
-              </h2>
+                <div className="grid gap-5 md:grid-cols-2">
 
-              <div className="grid gap-5 md:grid-cols-2">
+                  <div>
+                    <label className="field-label">
+                      Event title *
+                    </label>
 
-                <div>
+                    <input
+                      value={formData.title}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          title: e.target.value
+                        })
+                      }
+                      className="field"
+                      placeholder="Tech Workshop"
+                      required
+                    />
+                  </div>
 
-                  <label className="field-label">
-                    Event title *
-                  </label>
+                  <div>
+                    <label className="field-label">
+                      Club *
+                    </label>
 
-                  <input
-                    value={formData.title}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        title: e.target.value
-                      })
-                    }
-                    className="field"
-                    placeholder="Tech Workshop"
-                    required
-                  />
-
-                </div>
-
-
-                <div>
-
-                  <label className="field-label">
-                    Club *
-                  </label>
-
-                  <select
-                    value={formData.club}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        club: e.target.value
-                      })
-                    }
-                    className="field"
-                    required
-                  >
-
-                    <option value="">
-                      Select a club
-                    </option>
-
-                    {clubs.map((club) => (
-                      <option
-                        key={club._id}
-                        value={club._id}
-                      >
-                        {club.clubName}
+                    <select
+                      value={formData.club}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          club: e.target.value
+                        })
+                      }
+                      className="field"
+                      required
+                    >
+                      <option value="">
+                        Select a club
                       </option>
-                    ))}
 
-                  </select>
+                      {clubs.map((club) => (
+                        <option
+                          key={club._id}
+                          value={club._id}
+                        >
+                          {club.clubName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
                 </div>
 
-              </div>
-
-
-              <div>
-
-                <label className="field-label">
-                  Description *
-                </label>
-
-                <textarea
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      description: e.target.value
-                    })
-                  }
-                  className="field min-h-28"
-                  placeholder="Describe the event"
-                  required
-                />
-
-              </div>
-
-
-              <div className="grid gap-5 md:grid-cols-2">
-
                 <div>
-
                   <label className="field-label">
-                    Start date & time *
+                    Description *
                   </label>
 
-                  <input
-                    type="datetime-local"
-                    value={formData.date}
+                  <textarea
+                    value={formData.description}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        date: e.target.value
+                        description: e.target.value
                       })
                     }
-                    className="field"
+                    className="field min-h-28"
+                    placeholder="Describe the event"
                     required
                   />
+                </div>
+
+                {/* DATE / TIME */}
+
+                <div className="grid gap-5 md:grid-cols-2">
+
+                  <div>
+                    <label className="field-label">
+                      Start date & time *
+                    </label>
+
+                    <input
+                      type="datetime-local"
+                      value={formData.date}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          date: e.target.value
+                        })
+                      }
+                      className="field"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="field-label">
+                      End date & time *
+                    </label>
+
+                    <input
+                      type="datetime-local"
+                      value={formData.endDate}
+                      min={
+                        formData.date ||
+                        undefined
+                      }
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          endDate: e.target.value
+                        })
+                      }
+                      className="field"
+                      required
+                    />
+                  </div>
 
                 </div>
 
+                {/* LOCATION / CAPACITY */}
 
-                <div>
+                <div className="grid gap-5 md:grid-cols-2">
 
-                  <label className="field-label">
-                    End date & time
-                  </label>
+                  <div>
+                    <label className="field-label">
+                      Location
+                    </label>
 
-                  <input
-                    type="datetime-local"
-                    value={formData.endDate}
-                    min={formData.date || undefined}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        endDate: e.target.value
-                      })
-                    }
-                    className="field"
-                  />
+                    <input
+                      value={formData.location}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          location: e.target.value
+                        })
+                      }
+                      className="field"
+                      placeholder="Room 101"
+                    />
+                  </div>
 
-                </div>
+                  <div>
+                    <label className="field-label">
+                      Capacity
+                    </label>
 
-              </div>
-
-
-              <div className="grid gap-5 md:grid-cols-3">
-
-                <div>
-
-                  <label className="field-label">
-                    Location
-                  </label>
-
-                  <input
-                    value={formData.location}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        location: e.target.value
-                      })
-                    }
-                    className="field"
-                    placeholder="Room 101"
-                  />
+                    <input
+                      type="number"
+                      min="1"
+                      value={formData.capacity}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          capacity:
+                            Number(e.target.value)
+                        })
+                      }
+                      className="field"
+                    />
+                  </div>
 
                 </div>
 
+                {/* CATEGORY */}
 
                 <div>
-
                   <label className="field-label">
                     Category
                   </label>
@@ -933,62 +780,188 @@ const Events = () => {
                       })
                     }
                     className="field"
-                    placeholder="Technical"
+                    placeholder="Technical, Cultural, Sports..."
                   />
-
                 </div>
 
+                <div className="flex flex-col gap-3 sm:flex-row">
 
-                <div>
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                  >
+                    Create event
+                  </button>
 
-                  <label className="field-label">
-                    Capacity
-                  </label>
-
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.capacity}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        capacity:
-                          Number(e.target.value)
-                      })
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowForm(false)
                     }
-                    className="field"
-                  />
+                    className="btn-secondary"
+                  >
+                    Cancel
+                  </button>
 
                 </div>
+
+              </form>
+            )}
+
+          {/* =================================================
+              SEARCH + FILTER
+          ================================================= */}
+
+          <div className="app-card mb-8">
+
+            <div className="mb-5 flex items-center gap-2">
+
+              <Filter
+                size={20}
+                className="text-[#145f82]"
+              />
+
+              <h2 className="text-xl font-black text-black">
+                Find events
+              </h2>
+
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+
+              {/* SEARCH */}
+
+              <div className="relative">
+
+                <Search
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) =>
+                    setSearchTerm(e.target.value)
+                  }
+                  className="field pl-10"
+                  placeholder="Search events..."
+                />
 
               </div>
 
+              {/* CATEGORY */}
 
-              <div className="flex flex-col gap-3 sm:flex-row">
+              <select
+                value={categoryFilter}
+                onChange={(e) =>
+                  setCategoryFilter(e.target.value)
+                }
+                className="field"
+              >
 
-                <button
-                  type="submit"
-                  className="btn-primary"
-                >
-                  Create event
-                </button>
+                <option value="all">
+                  All categories
+                </option>
 
+                {categories
+                  .filter(
+                    (category) =>
+                      category !== 'all'
+                  )
+                  .map((category) => (
+                    <option
+                      key={category}
+                      value={category}
+                    >
+                      {category}
+                    </option>
+                  ))}
+
+              </select>
+
+              {/* CLUB */}
+
+              <select
+                value={clubFilter}
+                onChange={(e) =>
+                  setClubFilter(e.target.value)
+                }
+                className="field"
+              >
+
+                <option value="all">
+                  All clubs
+                </option>
+
+                {clubs.map((club) => (
+                  <option
+                    key={club._id}
+                    value={club._id}
+                  >
+                    {club.clubName}
+                  </option>
+                ))}
+
+              </select>
+
+              {/* STATUS */}
+
+              <select
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value)
+                }
+                className="field"
+              >
+
+                <option value="all">
+                  All statuses
+                </option>
+
+                <option value="Upcoming">
+                  Upcoming
+                </option>
+
+                <option value="Ongoing">
+                  Ongoing
+                </option>
+
+                <option value="Finished">
+                  Finished
+                </option>
+
+                <option value="Cancelled">
+                  Cancelled
+                </option>
+
+              </select>
+
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+
+              <p className="text-sm font-semibold text-slate-500">
+                Showing {filteredEvents.length} of{' '}
+                {events.length} events
+              </p>
+
+              {(searchTerm ||
+                categoryFilter !== 'all' ||
+                clubFilter !== 'all' ||
+                statusFilter !== 'all') && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowForm(false)
-                  }
+                  onClick={clearFilters}
                   className="btn-secondary"
                 >
-                  Cancel
+                  Clear filters
                 </button>
+              )}
 
-              </div>
+            </div>
 
-            </form>
-
-          )}
-
+          </div>
 
           {/* =================================================
               EVENTS
@@ -1006,15 +979,42 @@ const Events = () => {
                   );
 
                 const isFull =
-                  (event.registeredStudents?.length || 0) >=
-                  event.capacity;
+                  (event.registeredStudents?.length ||
+                    0) >= event.capacity;
 
                 const eventStatus =
                   getEventStatus(event);
 
-                const isLoading =
-                  actionLoadingIds.includes(
-                    event._id
+                /*
+                  ATTEND IS AVAILABLE ONLY WHEN:
+                  1. User is registered
+                  2. Event is ongoing
+                  3. Event is not cancelled
+                */
+
+                const canAttend =
+                  isRegistered &&
+                  eventStatus === 'Ongoing' &&
+                  event.status?.toLowerCase() !==
+                    'cancelled';
+
+                const isAttending =
+                  (event.participants || []).some(
+                    (participant) => {
+                      const participantId =
+                        typeof participant === 'string'
+                          ? participant
+                          : participant?._id ||
+                            participant?.id;
+
+                      const currentUserId =
+                        user?.id || user?._id;
+
+                      return (
+                        participantId ===
+                        currentUserId
+                      );
+                    }
                   );
 
                 return (
@@ -1024,7 +1024,7 @@ const Events = () => {
                     className="app-card app-card-hover"
                   >
 
-                    {/* HEADER */}
+                    {/* EVENT HEADER */}
 
                     <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 
@@ -1033,13 +1033,13 @@ const Events = () => {
                         <div className="mb-2 flex flex-wrap gap-2">
 
                           {event.category && (
-                            <span className="chip bg-slate-100 text-slate-700">
+                            <span className="chip bg-slate-100 text-slate-700 border border-slate-200">
                               {event.category}
                             </span>
                           )}
 
                           {event.club?.clubName && (
-                            <span className="chip bg-[#eef8fc] text-[#145f82]">
+                            <span className="chip bg-[#eef8fc] text-[#145f82] border border-[#d6edf5]">
                               {event.club.clubName}
                             </span>
                           )}
@@ -1056,14 +1056,18 @@ const Events = () => {
 
                       </div>
 
+                      {/* STATUS */}
 
                       <span
-                        className={`chip ${
-                          eventStatus === 'Completed'
+                        className={`chip whitespace-nowrap ${
+                          eventStatus ===
+                          'Finished'
                             ? 'bg-red-100 text-red-700 border border-red-200'
-                            : eventStatus === 'Ongoing'
+                            : eventStatus ===
+                              'Ongoing'
                             ? 'bg-yellow-100 text-yellow-700 border border-yellow-200'
-                            : eventStatus === 'Cancelled'
+                            : eventStatus ===
+                              'Cancelled'
                             ? 'bg-gray-100 text-gray-700 border border-gray-200'
                             : 'bg-green-100 text-green-700 border border-green-200'
                         }`}
@@ -1073,10 +1077,11 @@ const Events = () => {
 
                     </div>
 
-
-                    {/* DETAILS */}
+                    {/* EVENT DETAILS */}
 
                     <div className="mb-5 grid gap-3 text-sm font-bold text-slate-600">
+
+                      {/* START */}
 
                       <div className="flex items-center gap-2">
 
@@ -1085,13 +1090,16 @@ const Events = () => {
                           className="text-[#145f82]"
                         />
 
-                        {formatDate(event.date)}
+                        <span>
+                          Start:{' '}
+                          {formatDate(event.date)}
+                        </span>
 
                       </div>
 
+                      {/* END */}
 
                       {event.endDate && (
-
                         <div className="flex items-center gap-2">
 
                           <Calendar
@@ -1099,13 +1107,17 @@ const Events = () => {
                             className="text-[#145f82]"
                           />
 
-                          Ends:{' '}
-                          {formatDate(event.endDate)}
+                          <span>
+                            End:{' '}
+                            {formatDate(
+                              event.endDate
+                            )}
+                          </span>
 
                         </div>
-
                       )}
 
+                      {/* LOCATION */}
 
                       <div className="flex items-center gap-2">
 
@@ -1119,6 +1131,7 @@ const Events = () => {
 
                       </div>
 
+                      {/* REGISTRATION */}
 
                       <div className="flex items-center gap-2">
 
@@ -1127,38 +1140,110 @@ const Events = () => {
                           className="text-[#145f82]"
                         />
 
-                        {event.registeredStudents?.length ||
-                          0}{' '}
-                        / {event.capacity}{' '}
-                        registered
+                        {event.registeredStudents
+                          ?.length || 0}{' '}
+                        / {event.capacity} registered
 
                       </div>
 
                     </div>
 
+                    {/* ATTENDANCE INFO */}
+
+                    {eventStatus === 'Ongoing' &&
+                      isRegistered && (
+                        <div className="mb-5 rounded-xl border border-yellow-200 bg-yellow-50 p-4">
+
+                          <div className="flex items-start gap-3">
+
+                            <CheckCircle
+                              size={20}
+                              className="mt-0.5 text-yellow-600"
+                            />
+
+                            <div>
+
+                              <p className="font-bold text-yellow-800">
+                                Event is currently
+                                ongoing
+                              </p>
+
+                              <p className="mt-1 text-sm text-yellow-700">
+                                Mark your attendance
+                                before the event
+                                ends to receive
+                                your certificate.
+                              </p>
+
+                            </div>
+
+                          </div>
+
+                        </div>
+                      )}
+
+                    {/* ALREADY ATTENDED */}
+
+                    {isAttending && (
+                      <div className="mb-5 rounded-xl border border-green-200 bg-green-50 p-4">
+
+                        <div className="flex items-center gap-3">
+
+                          <CheckCircle
+                            size={20}
+                            className="text-green-600"
+                          />
+
+                          <div>
+
+                            <p className="font-bold text-green-800">
+                              Attendance marked
+                            </p>
+
+                            <p className="text-sm text-green-700">
+                              Your certificate is
+                              available in
+                              Certificates.
+                            </p>
+
+                          </div>
+
+                        </div>
+
+                      </div>
+                    )}
 
                     {/* ACTIONS */}
 
                     <div className="flex flex-wrap gap-2 mt-auto">
 
+                      {/* REGISTER / UNREGISTER */}
+
                       {isRegistered ? (
 
                         <button
                           type="button"
-                          disabled={
-                            isLoading ||
-                            eventStatus === 'Completed' ||
-                            eventStatus === 'Cancelled'
-                          }
                           onClick={() =>
                             handleUnregisterEvent(
                               event._id
                             )
                           }
-                          className="btn-danger flex-1 whitespace-nowrap text-xs sm:text-sm px-2 disabled:opacity-50"
+                          disabled={
+                            actionLoadingIds.includes(
+                              event._id
+                            ) ||
+                            eventStatus ===
+                              'Ongoing' ||
+                            eventStatus ===
+                              'Finished'
+                          }
+                          className="btn-danger flex-1 whitespace-nowrap text-xs sm:text-sm px-2"
                         >
-                          {isLoading
-                            ? 'Processing...'
+                          {eventStatus ===
+                            'Ongoing' ||
+                          eventStatus ===
+                            'Finished'
+                            ? 'Registered'
                             : 'Tap to unregister'}
                         </button>
 
@@ -1166,32 +1251,94 @@ const Events = () => {
 
                         <button
                           type="button"
+                          onClick={() => {
+                            setSelectedEvent(
+                              event
+                            );
+                            setShowRegisterModal(
+                              true
+                            );
+                          }}
                           disabled={
                             isFull ||
-                            eventStatus === 'Completed' ||
-                            eventStatus === 'Cancelled' ||
-                            isLoading
+                            eventStatus !==
+                              'Upcoming'
                           }
-                          onClick={() => {
-                            setSelectedEvent(event);
-                            setShowRegisterModal(true);
-                          }}
-                          className="btn-primary flex-1 disabled:opacity-50"
+                          className="btn-primary flex-1"
                         >
                           {isFull
                             ? 'Full'
-                            : eventStatus === 'Completed'
-                            ? 'Completed'
-                            : eventStatus === 'Cancelled'
-                            ? 'Cancelled'
-                            : 'Register'}
+                            : eventStatus ===
+                              'Upcoming'
+                            ? 'Register'
+                            : 'Registration closed'}
                         </button>
 
                       )}
 
+                      {/* =================================================
+                          ATTEND BUTTON
+                          AVAILABLE TO ALL REGISTERED USERS
+                      ================================================= */}
+
+                      {canAttend && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleAttendEvent(
+                              event._id
+                            )
+                          }
+                          disabled={
+                            actionLoadingIds.includes(
+                              event._id
+                            ) || isAttending
+                          }
+                          className="btn-primary flex-1 flex items-center justify-center gap-2"
+                        >
+
+                          {actionLoadingIds.includes(
+                            event._id
+                          ) ? (
+                            'Marking...'
+                          ) : isAttending ? (
+                            <>
+                              <CheckCircle
+                                size={17}
+                              />
+                              Attended
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle
+                                size={17}
+                              />
+                              Attend
+                            </>
+                          )}
+
+                        </button>
+                      )}
+
+                      {/* CERTIFICATE */}
+
+                      {isAttending && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            window.location.href =
+                              '/certificates';
+                          }}
+                          className="btn-secondary flex items-center justify-center gap-2"
+                        >
+                          <Award size={17} />
+                          Certificate
+                        </button>
+                      )}
+
+                      {/* ADMIN DELETE */}
 
                       {user?.role === 'admin' && (
-
                         <button
                           type="button"
                           onClick={() =>
@@ -1204,7 +1351,6 @@ const Events = () => {
                         >
                           <Trash2 size={18} />
                         </button>
-
                       )}
 
                     </div>
@@ -1212,26 +1358,26 @@ const Events = () => {
                   </article>
 
                 );
-
               })}
 
             </div>
 
           ) : (
 
-            <div className="app-card text-center py-12">
+            <div className="app-card text-center">
 
               <Search
-                size={40}
-                className="mx-auto mb-4 text-slate-300"
+                size={35}
+                className="mx-auto mb-3 text-slate-400"
               />
 
               <p className="text-lg font-bold text-slate-500">
-                No events found
+                No events found.
               </p>
 
-              <p className="mt-2 text-sm text-slate-400">
-                Try changing your search or filters.
+              <p className="mt-1 text-sm text-slate-400">
+                Try changing your search or
+                filters.
               </p>
 
               <button
@@ -1249,7 +1395,6 @@ const Events = () => {
         </div>
 
       </main>
-
 
       {/* =================================================
           REGISTER MODAL

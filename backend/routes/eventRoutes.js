@@ -9,11 +9,9 @@ import {
   deleteEvent,
   registerForEvent,
   unregisterFromEvent,
+  attendEvent,
   getUpcomingEvents,
-  getMyCertificates,
-  getMyEventHistory,
-  markAttendance,
-  removeAttendance
+  getMyCertificates
 } from '../controllers/eventController.js';
 
 import {
@@ -66,6 +64,11 @@ router.get(
   getEventsByClub
 );
 
+router.post(
+  '/:id/attend',
+  verifyToken,
+  attendEvent
+);
 
 // =====================================================
 // ADMIN ATTENDANCE
@@ -138,5 +141,10 @@ router.post(
   unregisterFromEvent
 );
 
+router.post(
+  '/:id/attend',
+  verifyToken,
+  attendEvent
+);
 
 export default router;
