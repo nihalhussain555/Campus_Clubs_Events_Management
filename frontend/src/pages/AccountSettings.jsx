@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { authAPI } from '../services/api';
-import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
 import Navbar from "../components/Navbar";
 import LoadingScreen from '../components/LoadingScreen';
