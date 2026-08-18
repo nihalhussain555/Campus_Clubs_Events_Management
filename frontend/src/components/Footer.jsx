@@ -36,10 +36,7 @@ const Footer = () => {
             ['About', '/about'],
             ['Contact', '/contact'],
           ].map(([label, path]) => (
-            <button
-              key={path}
-              type="button"
-              onClick={() => navigate(path)}
+            <button key={path} type="button" onClick={() => navigate(path)}
               className="rounded-full px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-100 hover:text-black"
             >
               {label}
