@@ -244,7 +244,20 @@ export const eventAPI = {
     api.get('/events/certificates/my')
 };
 
+// =====================================================
+// CERTIFICATE API
+// =====================================================
 
+export const certificateAPI = {
+
+  // Student certificate history
+  getMyCertificates: () =>
+    api.get('/certificates/my'),
+
+  // Public certificate verification
+  verifyCertificate: (certificateId) =>
+    api.get(`/certificates/verify/${certificateId}`)
+};
 
 export const notificationAPI = {
 

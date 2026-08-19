@@ -2,7 +2,8 @@ import Event from '../models/Event.js';
 import User from '../models/User.js';
 import Club from '../models/Club.js';
 
-
+import Certificate from '../models/Certificate.js';
+import { createCertificate } from './certificateController.js';
 // =====================================================
 // HELPER - CALCULATE EVENT STATUS FROM START + END TIME
 // =====================================================
@@ -563,109 +564,135 @@ export const unregisterFromEvent = async (req, res) => {
 };
 
 
-// =====================================================
-// ATTEND EVENT - ALL AUTHENTICATED STUDENTS
-// =====================================================
-
 export const attendEvent = async (req, res) => {
   try {
-    const event = await Event.findById(req.params.id);
+    const eventId = req.params.id;
+    const userId = req.user.id;
+
+    const event = await Event.findById(eventId);
 
     if (!event) {
       return res.status(404).json({
+        success: false,
         message: 'Event not found'
       });
     }
 
-    const userId = req.user.id;
+    const now = new Date();
 
-    // Check registration
+    const startTime = new Date(event.date);
+    const endTime = new Date(event.endDate);
+
+    // =================================================
+    // EVENT TIME VALIDATION
+    // =================================================
+
+    if (now < startTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Attendance is not available yet. The event has not started.'
+      });
+    }
+
+    if (now > endTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Attendance is closed. The event has already ended.'
+      });
+    }
+
+    // =================================================
+    // REGISTRATION CHECK
+    // =================================================
+
     const isRegistered = event.registeredStudents.some(
-      student => student.toString() === userId.toString()
+      studentId =>
+        studentId.toString() === userId.toString()
     );
 
     if (!isRegistered) {
-      return res.status(403).json({
-        message: 'You must register for this event before attending'
-      });
-    }
-
-    // Check current time
-    const now = new Date();
-    const start = new Date(event.date);
-    const end = new Date(event.endDate);
-
-    // Cancelled
-    if (event.status === 'cancelled') {
       return res.status(400).json({
-        message: 'This event has been cancelled'
+        success: false,
+        message: 'You must register for this event before attending.'
       });
     }
 
-    // Before start
-    if (now < start) {
-      return res.status(400).json({
-        message: `Attendance will open at ${start.toLocaleString()}`
-      });
-    }
+    // =================================================
+    // CHECK EXISTING ATTENDANCE
+    // =================================================
 
-    // After end
-    if (now > end) {
-      return res.status(400).json({
-        message: 'This event has already ended'
-      });
-    }
-
-    // Check if already attended
     const alreadyAttended = event.participants.some(
-      participant => participant.toString() === userId.toString()
+      studentId =>
+        studentId.toString() === userId.toString()
     );
 
     if (alreadyAttended) {
-      return res.status(400).json({
-        message: 'You have already attended this event'
+      const existingCertificate = await Certificate.findOne({
+        student: userId,
+        event: eventId
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Attendance already recorded.',
+        alreadyAttended: true,
+        certificate: existingCertificate
       });
     }
 
-    // Add participant
+    // =================================================
+    // RECORD ATTENDANCE
+    // =================================================
+
     event.participants.push(userId);
 
-    // Add certificate recipient
-    if (
-      event.certificateEnabled &&
-      !event.certificateRecipients.some(
-        recipient => recipient.toString() === userId.toString()
-      )
-    ) {
-      event.certificateRecipients.push(userId);
-
-      if (!event.certificateIssuedAt) {
-        event.certificateIssuedAt = new Date();
-      }
-    }
-
+    // Event is ongoing
     event.status = 'ongoing';
 
     await event.save();
 
-    res.status(200).json({
-      message:
-        'Attendance marked successfully. Your certificate is now available.',
+    // =================================================
+    // GENERATE CERTIFICATE
+    // =================================================
+
+    let certificate = null;
+
+    if (event.certificateEnabled !== false) {
+      certificate = await createCertificate({
+        studentId: userId,
+        eventId: eventId
+      });
+
+      // Add student to certificate recipients
+      const alreadyRecipient =
+        event.certificateRecipients.some(
+          studentId =>
+            studentId.toString() === userId.toString()
+        );
+
+      if (!alreadyRecipient) {
+        event.certificateRecipients.push(userId);
+        await event.save();
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Attendance recorded successfully.',
       attended: true,
-      certificateAvailable: event.certificateEnabled,
-      event
+      certificate
     });
 
   } catch (error) {
     console.error('Attend event error:', error);
 
-    res.status(500).json({
-      message: 'Unable to mark attendance',
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to record attendance',
       error: error.message
     });
   }
 };
-
 
 // =====================================================
 // ADMIN - MARK ATTENDANCE

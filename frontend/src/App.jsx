@@ -14,6 +14,7 @@ import About from './pages/About';
 import Contact from './pages/Contact';
 import Notifications from './pages/Notifications';
 import Calendar from './pages/Calendar';
+import VerifyCertificate from './pages/VerifyCertificate';
 
 function App() {
   return (
@@ -25,7 +26,10 @@ function App() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-
+        <Route
+          path="/verify-certificate/:certificateId"
+          element={<VerifyCertificate />}
+        />
         {/* Protected Routes */}
 
 
