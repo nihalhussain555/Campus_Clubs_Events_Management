@@ -14,13 +14,13 @@ const eventSchema = new mongoose.Schema(
       trim: true
     },
 
-    // Event start date/time
+    // START DATE + TIME
     date: {
       type: Date,
       required: [true, 'Please provide an event start date']
     },
 
-    // Event end date/time
+    // END DATE + TIME
     endDate: {
       type: Date,
       required: [true, 'Please provide an event end date']
@@ -44,7 +44,6 @@ const eventSchema = new mongoose.Schema(
       required: true
     },
 
-    // Students registered for the event
     registeredStudents: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -52,7 +51,6 @@ const eventSchema = new mongoose.Schema(
       }
     ],
 
-    // Students who actually attended
     participants: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -60,7 +58,6 @@ const eventSchema = new mongoose.Schema(
       }
     ],
 
-    // Students who received certificates
     certificateRecipients: [
       {
         type: mongoose.Schema.Types.ObjectId,

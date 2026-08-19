@@ -234,29 +234,28 @@ export const eventAPI = {
       data: {
         userId
       }
-    }),
-
-  // =================================================
-  // CERTIFICATES
-  // =================================================
-
-  getMyCertificates: () =>
-    api.get('/events/certificates/my')
+    })
 };
 
 // =====================================================
 // CERTIFICATE API
 // =====================================================
 
+
 export const certificateAPI = {
-
-  // Student certificate history
   getMyCertificates: () =>
-    api.get('/certificates/my'),
+    api.get("/certificates/my"),
 
-  // Public certificate verification
-  verifyCertificate: (certificateId) =>
-    api.get(`/certificates/verify/${certificateId}`)
+  verifyCertificate: (token) =>
+    api.get(`/certificates/verify/${token}`),
+
+  downloadCertificate: (certificateId) =>
+    api.get(
+      `/certificates/download/${certificateId}`,
+      {
+        responseType: "blob",
+      }
+    ),
 };
 
 export const notificationAPI = {

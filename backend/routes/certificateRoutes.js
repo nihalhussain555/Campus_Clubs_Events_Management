@@ -1,34 +1,51 @@
-import express from 'express';
+
+import express from "express";
 
 import {
+  createCertificate,
   getMyCertificates,
-  getCertificateById
-} from '../controllers/certificateController.js';
+  getCertificateById,
+  verifyCertificate,
+  downloadCertificatePDF,
+} from "../controllers/certificateController.js";
 
-import { verifyToken } from '../middleware/authMiddleware.js';
+import {
+  verifyToken,
+  verifyAdmin,
+} from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
+/* Public verification */
 
-// =====================================================
-// MY CERTIFICATES
-// =====================================================
+router.get("/verify/:qrToken", verifyCertificate);
+
+/* Student history */
+
+router.get("/my", verifyToken, getMyCertificates);
+
+/* Download certificate PDF */
 
 router.get(
-  '/my',
+  "/download/:certificateId",
   verifyToken,
-  getMyCertificates
+  downloadCertificatePDF
 );
 
+/* Admin issue certificate */
 
-// =====================================================
-// PUBLIC CERTIFICATE VERIFICATION
-// =====================================================
+router.post(
+  "/",
+  verifyToken,
+  verifyAdmin,
+  createCertificate
+);
+
+/* Get certificate */
 
 router.get(
-  '/verify/:certificateId',
+  "/:certificateId",
   getCertificateById
 );
-
 
 export default router;

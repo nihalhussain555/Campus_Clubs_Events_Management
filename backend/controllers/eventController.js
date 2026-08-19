@@ -1,14 +1,21 @@
 import Event from '../models/Event.js';
-import User from '../models/User.js';
-import Club from '../models/Club.js';
-
 import Certificate from '../models/Certificate.js';
-import { createCertificate } from './certificateController.js';
+
+import {
+  issueCertificate
+} from './certificateController.js';
+
+
 // =====================================================
-// HELPER - CALCULATE EVENT STATUS FROM START + END TIME
+// HELPERS
 // =====================================================
 
-const getCalculatedStatus = (event) => {
+const getUserId = (req) => {
+  return req.user?.id || req.user?._id;
+};
+
+
+const getCurrentStatus = (event) => {
   if (event.status === 'cancelled') {
     return 'cancelled';
   }
@@ -25,35 +32,14 @@ const getCalculatedStatus = (event) => {
     return 'ongoing';
   }
 
-  if (now > end) {
-    return 'completed';
-  }
-
-  return event.status || 'upcoming';
+  return 'completed';
 };
 
 
 // =====================================================
-// UPDATE EVENT STATUS
-// =====================================================
-
-const updateCalculatedStatus = async (event) => {
-  const calculatedStatus = getCalculatedStatus(event);
-
-  if (
-    event.status !== 'cancelled' &&
-    event.status !== calculatedStatus
-  ) {
-    event.status = calculatedStatus;
-    await event.save();
-  }
-
-  return calculatedStatus;
-};
-
-
-// =====================================================
-// CREATE EVENT - ADMIN ONLY
+// CREATE EVENT
+// POST /api/events
+// ADMIN
 // =====================================================
 
 export const createEvent = async (req, res) => {
@@ -64,60 +50,65 @@ export const createEvent = async (req, res) => {
       date,
       endDate,
       location,
+      category,
       club,
       capacity,
-      category
+      certificateEnabled
     } = req.body;
 
     if (!title || !description || !date || !endDate || !club) {
       return res.status(400).json({
+        success: false,
         message:
-          'Please provide title, description, start date, end date and club'
+          'Title, description, start date, end date and club are required'
       });
     }
 
     const startDate = new Date(date);
     const finishDate = new Date(endDate);
 
-    if (isNaN(startDate.getTime()) || isNaN(finishDate.getTime())) {
+    if (
+      Number.isNaN(startDate.getTime()) ||
+      Number.isNaN(finishDate.getTime())
+    ) {
       return res.status(400).json({
-        message: 'Invalid event date'
+        success: false,
+        message: 'Invalid start or end date'
       });
     }
 
     if (finishDate <= startDate) {
       return res.status(400).json({
-        message: 'End date must be after start date'
+        success: false,
+        message:
+          'End date and time must be after start date and time'
       });
     }
 
-    const clubExists = await Club.findById(club);
-
-    if (!clubExists) {
-      return res.status(404).json({
-        message: 'Club not found'
-      });
-    }
-
-    const event = new Event({
+    const event = await Event.create({
       title: title.trim(),
       description: description.trim(),
       date: startDate,
       endDate: finishDate,
-      location: location || 'TBD',
+      location: location?.trim() || 'TBD',
+      category: category?.trim() || 'General',
       club,
       capacity: Number(capacity) || 100,
-      category: category || clubExists.category || 'General'
+      certificateEnabled:
+        certificateEnabled !== undefined
+          ? Boolean(certificateEnabled)
+          : true,
+      status: 'upcoming'
     });
 
-    event.status = getCalculatedStatus(event);
-
-    await event.save();
-
     const populatedEvent = await Event.findById(event._id)
-      .populate('club', 'clubName category');
+      .populate('club', 'clubName')
+      .populate('registeredStudents', 'name email')
+      .populate('participants', 'name email')
+      .populate('certificateRecipients', 'name email');
 
-    res.status(201).json({
+    return res.status(201).json({
+      success: true,
       message: 'Event created successfully',
       event: populatedEvent
     });
@@ -125,8 +116,9 @@ export const createEvent = async (req, res) => {
   } catch (error) {
     console.error('Create event error:', error);
 
-    res.status(500).json({
-      message: 'Server error',
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to create event',
       error: error.message
     });
   }
@@ -135,39 +127,49 @@ export const createEvent = async (req, res) => {
 
 // =====================================================
 // GET ALL EVENTS
+// GET /api/events
 // =====================================================
 
 export const getAllEvents = async (req, res) => {
   try {
     const events = await Event.find()
-      .populate('club', 'clubName category')
+      .populate('club', 'clubName')
       .populate('registeredStudents', 'name email')
       .populate('participants', 'name email')
       .populate('certificateRecipients', 'name email')
       .sort({ date: 1 });
 
-    // Update status based on current time
-    for (const event of events) {
-      await updateCalculatedStatus(event);
-    }
+    const updatedEvents = events.map((event) => {
+      const status = getCurrentStatus(event);
 
-    // Re-fetch after status updates
-    const updatedEvents = await Event.find()
-      .populate('club', 'clubName category')
-      .populate('registeredStudents', 'name email')
-      .populate('participants', 'name email')
-      .populate('certificateRecipients', 'name email')
-      .sort({ date: 1 });
+      if (
+        event.status !== 'cancelled' &&
+        event.status !== status
+      ) {
+        Event.findByIdAndUpdate(
+          event._id,
+          { status }
+        ).catch(() => {});
+      }
 
-    res.status(200).json({
+      return {
+        ...event.toObject(),
+        status
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: updatedEvents.length,
       events: updatedEvents
     });
 
   } catch (error) {
     console.error('Get all events error:', error);
 
-    res.status(500).json({
-      message: 'Server error',
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch events',
       error: error.message
     });
   }
@@ -176,39 +178,40 @@ export const getAllEvents = async (req, res) => {
 
 // =====================================================
 // GET EVENT BY ID
+// GET /api/events/:id
 // =====================================================
 
 export const getEventById = async (req, res) => {
   try {
     const event = await Event.findById(req.params.id)
-      .populate('club', 'clubName description category')
+      .populate('club', 'clubName')
       .populate('registeredStudents', 'name email')
       .populate('participants', 'name email')
       .populate('certificateRecipients', 'name email');
 
     if (!event) {
       return res.status(404).json({
+        success: false,
         message: 'Event not found'
       });
     }
 
-    await updateCalculatedStatus(event);
+    const status = getCurrentStatus(event);
 
-    const updatedEvent = await Event.findById(event._id)
-      .populate('club', 'clubName description category')
-      .populate('registeredStudents', 'name email')
-      .populate('participants', 'name email')
-      .populate('certificateRecipients', 'name email');
-
-    res.status(200).json({
-      event: updatedEvent
+    return res.status(200).json({
+      success: true,
+      event: {
+        ...event.toObject(),
+        status
+      }
     });
 
   } catch (error) {
-    console.error('Get event error:', error);
+    console.error('Get event by ID error:', error);
 
-    res.status(500).json({
-      message: 'Server error',
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch event',
       error: error.message
     });
   }
@@ -217,6 +220,7 @@ export const getEventById = async (req, res) => {
 
 // =====================================================
 // GET EVENTS BY CLUB
+// GET /api/events/club/:clubId
 // =====================================================
 
 export const getEventsByClub = async (req, res) => {
@@ -224,601 +228,28 @@ export const getEventsByClub = async (req, res) => {
     const events = await Event.find({
       club: req.params.clubId
     })
-      .populate('club', 'clubName category')
+      .populate('club', 'clubName')
       .populate('registeredStudents', 'name email')
       .populate('participants', 'name email')
       .sort({ date: 1 });
 
-    for (const event of events) {
-      await updateCalculatedStatus(event);
-    }
+    const result = events.map((event) => ({
+      ...event.toObject(),
+      status: getCurrentStatus(event)
+    }));
 
-    const updatedEvents = await Event.find({
-      club: req.params.clubId
-    })
-      .populate('club', 'clubName category')
-      .populate('registeredStudents', 'name email')
-      .populate('participants', 'name email')
-      .sort({ date: 1 });
-
-    res.status(200).json({
-      events: updatedEvents
+    return res.status(200).json({
+      success: true,
+      count: result.length,
+      events: result
     });
 
   } catch (error) {
     console.error('Get club events error:', error);
 
-    res.status(500).json({
-      message: 'Server error',
-      error: error.message
-    });
-  }
-};
-
-
-// =====================================================
-// UPDATE EVENT - ADMIN ONLY
-// =====================================================
-
-export const updateEvent = async (req, res) => {
-  try {
-    const {
-      title,
-      description,
-      date,
-      endDate,
-      location,
-      capacity,
-      status,
-      category,
-      club,
-      certificateEnabled
-    } = req.body;
-
-    const event = await Event.findById(req.params.id);
-
-    if (!event) {
-      return res.status(404).json({
-        message: 'Event not found'
-      });
-    }
-
-    if (title !== undefined) {
-      event.title = title;
-    }
-
-    if (description !== undefined) {
-      event.description = description;
-    }
-
-    if (date !== undefined) {
-      event.date = new Date(date);
-    }
-
-    if (endDate !== undefined) {
-      event.endDate = new Date(endDate);
-    }
-
-    if (event.endDate <= event.date) {
-      return res.status(400).json({
-        message: 'End date must be after start date'
-      });
-    }
-
-    if (location !== undefined) {
-      event.location = location;
-    }
-
-    if (capacity !== undefined) {
-      if (Number(capacity) < 1) {
-        return res.status(400).json({
-          message: 'Capacity must be at least 1'
-        });
-      }
-
-      event.capacity = Number(capacity);
-    }
-
-    if (category !== undefined) {
-      event.category = category;
-    }
-
-    if (club !== undefined) {
-      const clubExists = await Club.findById(club);
-
-      if (!clubExists) {
-        return res.status(404).json({
-          message: 'Club not found'
-        });
-      }
-
-      event.club = club;
-    }
-
-    if (certificateEnabled !== undefined) {
-      event.certificateEnabled = certificateEnabled;
-    }
-
-    // Admin can explicitly cancel
-    if (status === 'cancelled') {
-      event.status = 'cancelled';
-    } else {
-      event.status = getCalculatedStatus(event);
-    }
-
-    await event.save();
-
-    const updatedEvent = await Event.findById(event._id)
-      .populate('club', 'clubName category')
-      .populate('registeredStudents', 'name email')
-      .populate('participants', 'name email')
-      .populate('certificateRecipients', 'name email');
-
-    res.status(200).json({
-      message: 'Event updated successfully',
-      event: updatedEvent
-    });
-
-  } catch (error) {
-    console.error('Update event error:', error);
-
-    res.status(500).json({
-      message: 'Server error',
-      error: error.message
-    });
-  }
-};
-
-
-// =====================================================
-// DELETE EVENT - ADMIN ONLY
-// =====================================================
-
-export const deleteEvent = async (req, res) => {
-  try {
-    const event = await Event.findById(req.params.id);
-
-    if (!event) {
-      return res.status(404).json({
-        message: 'Event not found'
-      });
-    }
-
-    await Event.findByIdAndDelete(req.params.id);
-
-    // Remove event from users' registeredEvents
-    await User.updateMany(
-      {
-        registeredEvents: req.params.id
-      },
-      {
-        $pull: {
-          registeredEvents: req.params.id
-        }
-      }
-    );
-
-    res.status(200).json({
-      message: 'Event deleted successfully'
-    });
-
-  } catch (error) {
-    console.error('Delete event error:', error);
-
-    res.status(500).json({
-      message: 'Server error',
-      error: error.message
-    });
-  }
-};
-
-
-// =====================================================
-// REGISTER FOR EVENT
-// =====================================================
-
-export const registerForEvent = async (req, res) => {
-  try {
-    const event = await Event.findById(req.params.id);
-
-    if (!event) {
-      return res.status(404).json({
-        message: 'Event not found'
-      });
-    }
-
-    const currentStatus = getCalculatedStatus(event);
-
-    if (event.status === 'cancelled' || currentStatus === 'cancelled') {
-      return res.status(400).json({
-        message: 'This event has been cancelled'
-      });
-    }
-
-    if (currentStatus === 'completed') {
-      return res.status(400).json({
-        message: 'This event has already ended'
-      });
-    }
-
-    const userId = req.user.id;
-
-    const alreadyRegistered = event.registeredStudents.some(
-      student => student.toString() === userId.toString()
-    );
-
-    if (alreadyRegistered) {
-      return res.status(400).json({
-        message: 'Already registered for this event'
-      });
-    }
-
-    if (event.registeredStudents.length >= event.capacity) {
-      return res.status(400).json({
-        message: 'Event is at full capacity'
-      });
-    }
-
-    event.registeredStudents.push(userId);
-
-    event.status = currentStatus;
-
-    await event.save();
-
-    const user = await User.findById(userId);
-
-    if (user) {
-      const alreadyExists = user.registeredEvents?.some(
-        eventId => eventId.toString() === req.params.id.toString()
-      );
-
-      if (!alreadyExists) {
-        if (!user.registeredEvents) {
-          user.registeredEvents = [];
-        }
-
-        user.registeredEvents.push(req.params.id);
-        await user.save();
-      }
-    }
-
-    const updatedEvent = await Event.findById(event._id)
-      .populate('club', 'clubName category')
-      .populate('registeredStudents', 'name email')
-      .populate('participants', 'name email');
-
-    res.status(200).json({
-      message: 'Registered for event successfully',
-      event: updatedEvent
-    });
-
-  } catch (error) {
-    console.error('Register event error:', error);
-
-    res.status(500).json({
-      message: 'Server error',
-      error: error.message
-    });
-  }
-};
-
-
-// =====================================================
-// UNREGISTER FROM EVENT
-// =====================================================
-
-export const unregisterFromEvent = async (req, res) => {
-  try {
-    const event = await Event.findById(req.params.id);
-
-    if (!event) {
-      return res.status(404).json({
-        message: 'Event not found'
-      });
-    }
-
-    const currentStatus = getCalculatedStatus(event);
-
-    if (currentStatus === 'ongoing') {
-      return res.status(400).json({
-        message: 'You cannot unregister while the event is ongoing'
-      });
-    }
-
-    if (currentStatus === 'completed') {
-      return res.status(400).json({
-        message: 'You cannot unregister after the event has ended'
-      });
-    }
-
-    const userId = req.user.id;
-
-    event.registeredStudents = event.registeredStudents.filter(
-      student => student.toString() !== userId.toString()
-    );
-
-    await event.save();
-
-    const user = await User.findById(userId);
-
-    if (user && user.registeredEvents) {
-      user.registeredEvents = user.registeredEvents.filter(
-        eventId => eventId.toString() !== req.params.id.toString()
-      );
-
-      await user.save();
-    }
-
-    res.status(200).json({
-      message: 'Unregistered from event successfully'
-    });
-
-  } catch (error) {
-    console.error('Unregister event error:', error);
-
-    res.status(500).json({
-      message: 'Server error',
-      error: error.message
-    });
-  }
-};
-
-
-export const attendEvent = async (req, res) => {
-  try {
-    const eventId = req.params.id;
-    const userId = req.user.id;
-
-    const event = await Event.findById(eventId);
-
-    if (!event) {
-      return res.status(404).json({
-        success: false,
-        message: 'Event not found'
-      });
-    }
-
-    const now = new Date();
-
-    const startTime = new Date(event.date);
-    const endTime = new Date(event.endDate);
-
-    // =================================================
-    // EVENT TIME VALIDATION
-    // =================================================
-
-    if (now < startTime) {
-      return res.status(400).json({
-        success: false,
-        message: 'Attendance is not available yet. The event has not started.'
-      });
-    }
-
-    if (now > endTime) {
-      return res.status(400).json({
-        success: false,
-        message: 'Attendance is closed. The event has already ended.'
-      });
-    }
-
-    // =================================================
-    // REGISTRATION CHECK
-    // =================================================
-
-    const isRegistered = event.registeredStudents.some(
-      studentId =>
-        studentId.toString() === userId.toString()
-    );
-
-    if (!isRegistered) {
-      return res.status(400).json({
-        success: false,
-        message: 'You must register for this event before attending.'
-      });
-    }
-
-    // =================================================
-    // CHECK EXISTING ATTENDANCE
-    // =================================================
-
-    const alreadyAttended = event.participants.some(
-      studentId =>
-        studentId.toString() === userId.toString()
-    );
-
-    if (alreadyAttended) {
-      const existingCertificate = await Certificate.findOne({
-        student: userId,
-        event: eventId
-      });
-
-      return res.status(200).json({
-        success: true,
-        message: 'Attendance already recorded.',
-        alreadyAttended: true,
-        certificate: existingCertificate
-      });
-    }
-
-    // =================================================
-    // RECORD ATTENDANCE
-    // =================================================
-
-    event.participants.push(userId);
-
-    // Event is ongoing
-    event.status = 'ongoing';
-
-    await event.save();
-
-    // =================================================
-    // GENERATE CERTIFICATE
-    // =================================================
-
-    let certificate = null;
-
-    if (event.certificateEnabled !== false) {
-      certificate = await createCertificate({
-        studentId: userId,
-        eventId: eventId
-      });
-
-      // Add student to certificate recipients
-      const alreadyRecipient =
-        event.certificateRecipients.some(
-          studentId =>
-            studentId.toString() === userId.toString()
-        );
-
-      if (!alreadyRecipient) {
-        event.certificateRecipients.push(userId);
-        await event.save();
-      }
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Attendance recorded successfully.',
-      attended: true,
-      certificate
-    });
-
-  } catch (error) {
-    console.error('Attend event error:', error);
-
     return res.status(500).json({
       success: false,
-      message: 'Failed to record attendance',
-      error: error.message
-    });
-  }
-};
-
-// =====================================================
-// ADMIN - MARK ATTENDANCE
-// =====================================================
-
-export const markAttendance = async (req, res) => {
-  try {
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({
-        message: 'User ID is required'
-      });
-    }
-
-    const event = await Event.findById(req.params.id);
-
-    if (!event) {
-      return res.status(404).json({
-        message: 'Event not found'
-      });
-    }
-
-    const user = await User.findById(userId);
-
-    if (!user) {
-      return res.status(404).json({
-        message: 'User not found'
-      });
-    }
-
-    const isRegistered = event.registeredStudents.some(
-      student => student.toString() === userId.toString()
-    );
-
-    if (!isRegistered) {
-      return res.status(400).json({
-        message: 'Student is not registered for this event'
-      });
-    }
-
-    const alreadyAttended = event.participants.some(
-      participant => participant.toString() === userId.toString()
-    );
-
-    if (!alreadyAttended) {
-      event.participants.push(userId);
-    }
-
-    const alreadyCertificateRecipient =
-      event.certificateRecipients.some(
-        recipient => recipient.toString() === userId.toString()
-      );
-
-    if (
-      event.certificateEnabled &&
-      !alreadyCertificateRecipient
-    ) {
-      event.certificateRecipients.push(userId);
-
-      if (!event.certificateIssuedAt) {
-        event.certificateIssuedAt = new Date();
-      }
-    }
-
-    await event.save();
-
-    res.status(200).json({
-      message: 'Attendance marked successfully',
-      event
-    });
-
-  } catch (error) {
-    console.error('Admin mark attendance error:', error);
-
-    res.status(500).json({
-      message: 'Unable to mark attendance',
-      error: error.message
-    });
-  }
-};
-
-
-// =====================================================
-// ADMIN - REMOVE ATTENDANCE
-// =====================================================
-
-export const removeAttendance = async (req, res) => {
-  try {
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({
-        message: 'User ID is required'
-      });
-    }
-
-    const event = await Event.findById(req.params.id);
-
-    if (!event) {
-      return res.status(404).json({
-        message: 'Event not found'
-      });
-    }
-
-    event.participants = event.participants.filter(
-      participant => participant.toString() !== userId.toString()
-    );
-
-    event.certificateRecipients =
-      event.certificateRecipients.filter(
-        recipient => recipient.toString() !== userId.toString()
-      );
-
-    await event.save();
-
-    res.status(200).json({
-      message: 'Attendance removed successfully',
-      event
-    });
-
-  } catch (error) {
-    console.error('Remove attendance error:', error);
-
-    res.status(500).json({
-      message: 'Unable to remove attendance',
+      message: 'Failed to fetch club events',
       error: error.message
     });
   }
@@ -827,6 +258,7 @@ export const removeAttendance = async (req, res) => {
 
 // =====================================================
 // GET UPCOMING EVENTS
+// GET /api/events/upcoming
 // =====================================================
 
 export const getUpcomingEvents = async (req, res) => {
@@ -834,34 +266,24 @@ export const getUpcomingEvents = async (req, res) => {
     const now = new Date();
 
     const events = await Event.find({
-      date: { $gte: now },
+      date: { $gt: now },
       status: { $ne: 'cancelled' }
     })
-      .populate('club', 'clubName category')
-      .populate('registeredStudents', 'name email')
+      .populate('club', 'clubName')
       .sort({ date: 1 });
 
-    for (const event of events) {
-      await updateCalculatedStatus(event);
-    }
-
-    const updatedEvents = await Event.find({
-      date: { $gte: now },
-      status: { $ne: 'cancelled' }
-    })
-      .populate('club', 'clubName category')
-      .populate('registeredStudents', 'name email')
-      .sort({ date: 1 });
-
-    res.status(200).json({
-      events: updatedEvents
+    return res.status(200).json({
+      success: true,
+      count: events.length,
+      events
     });
 
   } catch (error) {
-    console.error('Upcoming events error:', error);
+    console.error('Get upcoming events error:', error);
 
-    res.status(500).json({
-      message: 'Server error',
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch upcoming events',
       error: error.message
     });
   }
@@ -869,120 +291,697 @@ export const getUpcomingEvents = async (req, res) => {
 
 
 // =====================================================
-// GET MY EVENT HISTORY
+// UPDATE EVENT
+// PUT /api/events/:id
+// ADMIN
+// =====================================================
+
+export const updateEvent = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
+      });
+    }
+
+    const {
+      title,
+      description,
+      date,
+      endDate,
+      location,
+      category,
+      club,
+      capacity,
+      status,
+      certificateEnabled
+    } = req.body;
+
+    const startDate = date
+      ? new Date(date)
+      : event.date;
+
+    const finishDate = endDate
+      ? new Date(endDate)
+      : event.endDate;
+
+    if (
+      Number.isNaN(startDate.getTime()) ||
+      Number.isNaN(finishDate.getTime())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid start or end date'
+      });
+    }
+
+    if (finishDate <= startDate) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'End date and time must be after start date and time'
+      });
+    }
+
+    event.title = title ?? event.title;
+    event.description = description ?? event.description;
+    event.date = startDate;
+    event.endDate = finishDate;
+    event.location = location ?? event.location;
+    event.category = category ?? event.category;
+    event.club = club ?? event.club;
+
+    if (capacity !== undefined) {
+      event.capacity = Number(capacity);
+    }
+
+    if (certificateEnabled !== undefined) {
+      event.certificateEnabled =
+        Boolean(certificateEnabled);
+    }
+
+    if (status === 'cancelled') {
+      event.status = 'cancelled';
+    } else {
+      event.status = getCurrentStatus(event);
+    }
+
+    await event.save();
+
+    const updatedEvent = await Event.findById(event._id)
+      .populate('club', 'clubName')
+      .populate('registeredStudents', 'name email')
+      .populate('participants', 'name email')
+      .populate('certificateRecipients', 'name email');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Event updated successfully',
+      event: updatedEvent
+    });
+
+  } catch (error) {
+    console.error('Update event error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update event',
+      error: error.message
+    });
+  }
+};
+
+
+// =====================================================
+// DELETE EVENT
+// DELETE /api/events/:id
+// ADMIN
+// =====================================================
+
+export const deleteEvent = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
+      });
+    }
+
+    // Delete certificates associated with this event
+    await Certificate.deleteMany({
+      event: event._id
+    });
+
+    await event.deleteOne();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Event deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete event error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete event',
+      error: error.message
+    });
+  }
+};
+
+
+// =====================================================
+// REGISTER
+// POST /api/events/:id/register
+// =====================================================
+
+export const registerForEvent = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User authentication required'
+      });
+    }
+
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
+      });
+    }
+
+    const status = getCurrentStatus(event);
+
+    if (status !== 'upcoming') {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Registration is available only for upcoming events'
+      });
+    }
+
+    const alreadyRegistered =
+      event.registeredStudents.some(
+        (id) =>
+          id.toString() === userId.toString()
+      );
+
+    if (alreadyRegistered) {
+      return res.status(409).json({
+        success: false,
+        message: 'You are already registered for this event'
+      });
+    }
+
+    if (
+      event.registeredStudents.length >= event.capacity
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event registration is full'
+      });
+    }
+
+    event.registeredStudents.push(userId);
+
+    await event.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Successfully registered for event',
+      event
+    });
+
+  } catch (error) {
+    console.error('Register event error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Registration failed',
+      error: error.message
+    });
+  }
+};
+
+
+// =====================================================
+// UNREGISTER
+// POST /api/events/:id/unregister
+// =====================================================
+
+export const unregisterFromEvent = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User authentication required'
+      });
+    }
+
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
+      });
+    }
+
+    const status = getCurrentStatus(event);
+
+    if (status !== 'upcoming') {
+      return res.status(400).json({
+        success: false,
+        message:
+          'You can only unregister before the event starts'
+      });
+    }
+
+    const isRegistered =
+      event.registeredStudents.some(
+        (id) =>
+          id.toString() === userId.toString()
+      );
+
+    if (!isRegistered) {
+      return res.status(400).json({
+        success: false,
+        message: 'You are not registered for this event'
+      });
+    }
+
+    event.registeredStudents =
+      event.registeredStudents.filter(
+        (id) =>
+          id.toString() !== userId.toString()
+      );
+
+    await event.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Successfully unregistered from event'
+    });
+
+  } catch (error) {
+    console.error('Unregister event error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Unregistration failed',
+      error: error.message
+    });
+  }
+};
+
+
+// =====================================================
+// ATTEND EVENT
+// POST /api/events/:id/attend
+// REGISTERED STUDENTS
+// =====================================================
+
+export const attendEvent = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User authentication required'
+      });
+    }
+
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
+      });
+    }
+
+    const isRegistered =
+      event.registeredStudents.some(
+        (student) =>
+          student.toString() === userId.toString()
+      );
+
+    if (!isRegistered) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'You must register for this event before attending'
+      });
+    }
+
+    const startTime = new Date(event.date);
+    const endTime = new Date(event.endDate);
+    const now = new Date();
+
+    if (now < startTime) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Attendance is available only when the event starts'
+      });
+    }
+
+    if (now > endTime) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Attendance is closed because the event has ended'
+      });
+    }
+
+    const alreadyAttended =
+      event.participants.some(
+        (student) =>
+          student.toString() === userId.toString()
+      );
+
+    if (alreadyAttended) {
+      return res.status(409).json({
+        success: false,
+        message:
+          'You have already marked attendance'
+      });
+    }
+
+    event.participants.push(userId);
+    event.status = 'ongoing';
+
+    await event.save();
+
+    // Generate certificate only when enabled
+    let certificate = null;
+
+    if (event.certificateEnabled) {
+      certificate = await issueCertificate(
+        userId,
+        event._id
+      );
+    }
+
+    const updatedEvent =
+      await Event.findById(event._id)
+        .populate(
+          'club',
+          'clubName category'
+        )
+        .populate(
+          'registeredStudents',
+          'name email'
+        )
+        .populate(
+          'participants',
+          'name email'
+        )
+        .populate(
+          'certificateRecipients',
+          'name email'
+        );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        'Attendance marked successfully',
+      event: updatedEvent,
+      certificate
+    });
+
+  } catch (error) {
+    console.error(
+      'Attend event error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        'Unable to mark attendance'
+    });
+  }
+};
+
+
+// =====================================================
+// ADMIN MARK ATTENDANCE
+// POST /api/events/:id/attendance
+// ADMIN
+// =====================================================
+
+export const markAttendance = async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+    }
+
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
+      });
+    }
+
+    const isRegistered =
+      event.registeredStudents.some(
+        (id) =>
+          id.toString() === userId.toString()
+      );
+
+    if (!isRegistered) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Student must be registered for the event'
+      });
+    }
+
+    const alreadyAttended =
+      event.participants.some(
+        (id) =>
+          id.toString() === userId.toString()
+      );
+
+    if (alreadyAttended) {
+      return res.status(409).json({
+        success: false,
+        message:
+          'Student has already been marked as attended'
+      });
+    }
+
+    event.participants.push(userId);
+
+    if (getCurrentStatus(event) !== 'cancelled') {
+      event.status = 'ongoing';
+    }
+
+    await event.save();
+
+    let certificate = null;
+
+    if (event.certificateEnabled) {
+      certificate = await issueCertificate(
+        userId,
+        event._id
+      );
+    }
+
+    const updatedEvent =
+      await Event.findById(event._id)
+        .populate('club', 'clubName')
+        .populate(
+          'registeredStudents',
+          'name email'
+        )
+        .populate(
+          'participants',
+          'name email'
+        )
+        .populate(
+          'certificateRecipients',
+          'name email'
+        );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        'Attendance marked successfully',
+      event: updatedEvent,
+      certificate
+    });
+
+  } catch (error) {
+    console.error(
+      'Admin mark attendance error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        'Failed to mark attendance'
+    });
+  }
+};
+
+
+// =====================================================
+// ADMIN REMOVE ATTENDANCE
+// DELETE /api/events/:id/attendance
+// ADMIN
+// =====================================================
+
+export const removeAttendance = async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+    }
+
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found'
+      });
+    }
+
+    const attended =
+      event.participants.some(
+        (id) =>
+          id.toString() === userId.toString()
+      );
+
+    if (!attended) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Student has not been marked as attended'
+      });
+    }
+
+    event.participants =
+      event.participants.filter(
+        (id) =>
+          id.toString() !== userId.toString()
+      );
+
+    await event.save();
+
+    // Remove certificate generated for this attendance
+    await Certificate.deleteMany({
+      event: event._id,
+      user: userId
+    });
+
+    const updatedEvent =
+      await Event.findById(event._id)
+        .populate('club', 'clubName')
+        .populate(
+          'registeredStudents',
+          'name email'
+        )
+        .populate(
+          'participants',
+          'name email'
+        )
+        .populate(
+          'certificateRecipients',
+          'name email'
+        );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        'Attendance removed successfully',
+      event: updatedEvent
+    });
+
+  } catch (error) {
+    console.error(
+      'Remove attendance error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        'Failed to remove attendance'
+    });
+  }
+};
+
+
+// =====================================================
+// EVENT HISTORY
+// GET /api/events/history/my
 // =====================================================
 
 export const getMyEventHistory = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User authentication required'
+      });
+    }
 
     const events = await Event.find({
       $or: [
-        { registeredStudents: userId },
-        { participants: userId }
+        {
+          registeredStudents: userId
+        },
+        {
+          participants: userId
+        }
       ]
     })
-      .populate('club', 'clubName category')
+      .populate('club', 'clubName')
       .sort({ date: -1 });
 
-    const history = events.map(event => ({
-      eventId: event._id,
-      title: event.title,
-      description: event.description,
-      date: event.date,
-      endDate: event.endDate,
-      location: event.location,
-      category: event.category,
-      clubName: event.club?.clubName || 'Campus Club',
+    const history = events.map((event) => {
+      const attended =
+        event.participants.some(
+          (id) =>
+            id.toString() === userId.toString()
+        );
 
-      registered: event.registeredStudents.some(
-        student => student.toString() === userId.toString()
-      ),
+      return {
+        ...event.toObject(),
+        status: getCurrentStatus(event),
+        attended
+      };
+    });
 
-      attended: event.participants.some(
-        participant => participant.toString() === userId.toString()
-      ),
-
-      certificateAvailable:
-        event.certificateRecipients.some(
-          recipient => recipient.toString() === userId.toString()
-        )
-    }));
-
-    res.status(200).json({
-      history
+    return res.status(200).json({
+      success: true,
+      count: history.length,
+      events: history
     });
 
   } catch (error) {
-    console.error('Event history error:', error);
+    console.error(
+      'Get event history error:',
+      error
+    );
 
-    res.status(500).json({
-      message: 'Unable to load event history',
-      error: error.message
-    });
-  }
-};
-
-
-// =====================================================
-// GET MY CERTIFICATES
-// =====================================================
-// Certificate ONLY if:
-// 1. Student registered
-// 2. Student attended
-// 3. Student exists in certificateRecipients
-// =====================================================
-
-export const getMyCertificates = async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    const events = await Event.find({
-      registeredStudents: userId,
-      participants: userId,
-      certificateRecipients: userId,
-      status: { $ne: 'cancelled' },
-      certificateEnabled: true
-    })
-      .populate('club', 'clubName category')
-      .sort({ date: -1 });
-
-    const certificates = events.map(event => ({
-      certificateId:
-        `CERT-${event._id.toString().slice(-8).toUpperCase()}`,
-
-      eventId: event._id,
-
-      eventName: event.title,
-
-      eventDescription: event.description,
-
-      eventDate: event.date,
-
-      endDate: event.endDate,
-
-      location: event.location,
-
-      category: event.category,
-
-      clubName:
-        event.club?.clubName || 'Campus Club',
-
-      issuedAt:
-        event.certificateIssuedAt || event.endDate,
-
-      attended: true
-    }));
-
-    res.status(200).json({
-      certificates
-    });
-
-  } catch (error) {
-    console.error('Get certificates error:', error);
-
-    res.status(500).json({
-      message: 'Unable to load certificates',
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load event history',
       error: error.message
     });
   }

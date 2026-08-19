@@ -1,141 +1,81 @@
-import Certificate from '../models/Certificate.js';
+import mongoose from 'mongoose';
 
-// =====================================================
-// GENERATE UNIQUE CERTIFICATE ID
-// =====================================================
+const certificateSchema = new mongoose.Schema(
+  {
+    certificateId: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true
+    },
 
-const generateCertificateId = () => {
-  const year = new Date().getFullYear();
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
 
-  const randomPart = Math.random()
-    .toString(36)
-    .substring(2, 8)
-    .toUpperCase();
+    event: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Event',
+      required: true
+    },
 
-  return `CERT-${year}-${randomPart}`;
-};
+    studentName: {
+      type: String,
+      required: true
+    },
 
+    eventName: {
+      type: String,
+      required: true
+    },
 
-// =====================================================
-// GET MY CERTIFICATES
-// GET /api/certificates/my
-// =====================================================
+    eventDate: {
+      type: Date,
+      required: true
+    },
 
-export const getMyCertificates = async (req, res) => {
-  try {
-    const certificates = await Certificate.find({
-      student: req.user.id
-    })
-      .populate('event', 'title description date endDate location')
-      .populate('student', 'name email')
-      .sort({ issuedAt: -1 });
+    endDate: {
+      type: Date,
+      required: true
+    },
 
-    res.status(200).json({
-      success: true,
-      count: certificates.length,
-      certificates
-    });
-  } catch (error) {
-    console.error('Get certificates error:', error);
+    location: {
+      type: String,
+      default: 'TBD'
+    },
 
-    res.status(500).json({
-      success: false,
-      message: 'Failed to load certificates',
-      error: error.message
-    });
-  }
-};
+    clubName: {
+      type: String,
+      default: 'Campus Club'
+    },
 
+    category: {
+      type: String,
+      default: 'General'
+    },
 
-// =====================================================
-// GET CERTIFICATE BY ID
-// GET /api/certificates/:certificateId
-// PUBLIC
-// =====================================================
+    issuedAt: {
+      type: Date,
+      default: Date.now
+    },
 
-export const getCertificateById = async (req, res) => {
-  try {
-    const certificate = await Certificate.findOne({
-      certificateId: req.params.certificateId
-    })
-      .populate('student', 'name email')
-      .populate(
-        'event',
-        'title description date endDate location category'
-      );
+    qrToken: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true
+    },
 
-    if (!certificate) {
-      return res.status(404).json({
-        success: false,
-        message: 'Certificate not found'
-      });
+    verified: {
+      type: Boolean,
+      default: true
     }
-
-    res.status(200).json({
-      success: true,
-      certificate
-    });
-  } catch (error) {
-    console.error('Certificate verification error:', error);
-
-    res.status(500).json({
-      success: false,
-      message: 'Failed to verify certificate',
-      error: error.message
-    });
+  },
+  {
+    timestamps: true
   }
-};
+);
 
-
-// =====================================================
-// CREATE CERTIFICATE
-// Used by event attendance logic
-// =====================================================
-
-export const createCertificate = async ({
-  studentId,
-  eventId
-}) => {
-  try {
-    // Check if certificate already exists
-    const existingCertificate = await Certificate.findOne({
-      student: studentId,
-      event: eventId
-    });
-
-    if (existingCertificate) {
-      return existingCertificate;
-    }
-
-    let certificateId;
-    let exists = true;
-
-    // Ensure certificate ID is unique
-    while (exists) {
-      certificateId = generateCertificateId();
-
-      exists = await Certificate.exists({
-        certificateId
-      });
-    }
-
-    const frontendUrl =
-      process.env.FRONTEND_URL || 'http://localhost:5173';
-
-    const verificationUrl =
-      `${frontendUrl}/verify-certificate/${certificateId}`;
-
-    const certificate = await Certificate.create({
-      certificateId,
-      student: studentId,
-      event: eventId,
-      issuedAt: new Date(),
-      verificationUrl
-    });
-
-    return certificate;
-  } catch (error) {
-    console.error('Create certificate error:', error);
-    throw error;
-  }
-};
+export default mongoose.model('Certificate', certificateSchema);

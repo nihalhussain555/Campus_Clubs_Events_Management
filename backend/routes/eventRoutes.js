@@ -12,7 +12,6 @@ import {
   attendEvent,
   getUpcomingEvents,
   getMyEventHistory,
-  getMyCertificates,
   markAttendance,
   removeAttendance
 } from '../controllers/eventController.js';
@@ -29,9 +28,15 @@ const router = express.Router();
 // PUBLIC EVENT ROUTES
 // =====================================================
 
-router.get('/', getAllEvents);
+router.get(
+  '/',
+  getAllEvents
+);
 
-router.get('/upcoming', getUpcomingEvents);
+router.get(
+  '/upcoming',
+  getUpcomingEvents
+);
 
 
 // =====================================================
@@ -47,19 +52,8 @@ router.get(
 
 
 // =====================================================
-// STUDENT CERTIFICATES
-// IMPORTANT: BEFORE /:id
-// =====================================================
-
-router.get(
-  '/certificates/my',
-  verifyToken,
-  getMyCertificates
-);
-
-
-// =====================================================
 // CLUB EVENTS
+// IMPORTANT: BEFORE /:id
 // =====================================================
 
 router.get(
@@ -70,7 +64,6 @@ router.get(
 
 // =====================================================
 // STUDENT ATTENDANCE
-// ALL AUTHENTICATED USERS
 // =====================================================
 
 router.post(

@@ -6,20 +6,20 @@ import {
   Trash2,
   Users,
   Search,
-  Filter,
   CheckCircle,
-  Award,
-  Clock,
-  X
+  Clock
 } from 'lucide-react';
 
 import Navbar from '../components/Navbar';
-import { clubAPI, eventAPI } from '../services/api';
 import LoadingScreen from '../components/LoadingScreen';
 import Toast from '../components/Toast';
 import RegisterEventModal from '../components/RegisterEventModal';
 
+import { clubAPI, eventAPI } from '../services/api';
+
+
 const Events = () => {
+
   // =====================================================
   // STATE
   // =====================================================
@@ -28,39 +28,55 @@ const Events = () => {
   const [clubs, setClubs] = useState([]);
 
   const [loading, setLoading] = useState(true);
+
   const [toast, setToast] = useState(null);
 
-  const [registeredEventIds, setRegisteredEventIds] = useState([]);
-  const [attendedEventIds, setAttendedEventIds] = useState([]);
+  const [selectedEvent, setSelectedEvent] =
+    useState(null);
 
-  const [showForm, setShowForm] = useState(false);
+  const [showRegisterModal, setShowRegisterModal] =
+    useState(false);
 
-  const [selectedEvent, setSelectedEvent] = useState(null);
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [registeringEvent, setRegisteringEvent] =
+    useState(false);
 
-  const [registeringEvent, setRegisteringEvent] = useState(false);
+  const [actionLoadingIds, setActionLoadingIds] =
+    useState([]);
 
-  const [actionLoadingIds, setActionLoadingIds] = useState([]);
+  const [showForm, setShowForm] =
+    useState(false);
 
-  // Search + Filter
-  const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [clubFilter, setClubFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  // Search
+  const [search, setSearch] =
+    useState('');
 
-  // Create Event Form
+  // Filters
+  const [statusFilter, setStatusFilter] =
+    useState('all');
+
+  const [categoryFilter, setCategoryFilter] =
+    useState('all');
+
+  const [clubFilter, setClubFilter] =
+    useState('all');
+
+  const [sortBy, setSortBy] =
+    useState('date');
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     date: '',
     endDate: '',
     location: '',
+    category: 'General',
     club: '',
-    capacity: 120,
-    category: ''
+    capacity: 120
   });
 
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user =
+    JSON.parse(localStorage.getItem('user') || '{}');
+
 
   // =====================================================
   // FETCH EVENTS
@@ -68,58 +84,13 @@ const Events = () => {
 
   const fetchEvents = async () => {
     try {
-      const response = await eventAPI.getAllEvents();
+      const response =
+        await eventAPI.getAllEvents();
 
-      const fetchedEvents = response.data?.events || [];
-
-      setEvents(fetchedEvents);
-
-      const currentUser = JSON.parse(
-        localStorage.getItem('user') || '{}'
+      setEvents(
+        response.data.events || []
       );
-
-      const userId = currentUser?.id || currentUser?._id;
-
-      if (!userId) {
-        setRegisteredEventIds([]);
-        setAttendedEventIds([]);
-        return;
-      }
-
-      // Registered events
-      const registeredIds = fetchedEvents
-        .filter((event) =>
-          (event.registeredStudents || []).some((student) => {
-            const studentId =
-              typeof student === 'string'
-                ? student
-                : student?._id || student?.id;
-
-            return studentId?.toString() === userId.toString();
-          })
-        )
-        .map((event) => event._id);
-
-      setRegisteredEventIds(registeredIds);
-
-      // Attended events
-      const attendedIds = fetchedEvents
-        .filter((event) =>
-          (event.participants || []).some((student) => {
-            const studentId =
-              typeof student === 'string'
-                ? student
-                : student?._id || student?.id;
-
-            return studentId?.toString() === userId.toString();
-          })
-        )
-        .map((event) => event._id);
-
-      setAttendedEventIds(attendedIds);
     } catch (error) {
-      console.error('Error loading events:', error);
-
       setToast({
         message:
           error.response?.data?.message ||
@@ -131,91 +102,135 @@ const Events = () => {
     }
   };
 
+
   // =====================================================
   // FETCH CLUBS
   // =====================================================
 
   const fetchClubs = async () => {
     try {
-      const response = await clubAPI.getAllClubs();
+      const response =
+        await clubAPI.getAllClubs();
 
-      setClubs(response.data?.clubs || []);
-    } catch (error) {
-      console.error('Error loading clubs:', error);
+      setClubs(
+        response.data.clubs || []
+      );
+    } catch {
       setClubs([]);
     }
   };
 
-  // =====================================================
-  // INITIAL LOAD
-  // =====================================================
 
   useEffect(() => {
     fetchEvents();
     fetchClubs();
   }, []);
 
+
   // =====================================================
   // EVENT STATUS
   // =====================================================
-  //
-  // IMPORTANT:
-  //
-  // start time = event.date
-  // end time   = event.endDate
-  //
-  // Before start:
-  // Upcoming
-  //
-  // Between start and end:
-  // Ongoing
-  //
-  // After end:
-  // Completed
-  //
-  // Cancelled always:
-  // Cancelled
-  //
-  // =====================================================
 
   const getEventStatus = (event) => {
+
     if (
-      event.status?.toLowerCase() === 'cancelled'
+      event.status?.toLowerCase() ===
+      'cancelled'
     ) {
       return 'Cancelled';
     }
 
     const now = new Date();
 
-    const startDate = new Date(event.date);
+    const start =
+      new Date(event.date);
 
-    const endDate = event.endDate
-      ? new Date(event.endDate)
-      : startDate;
+    const end =
+      new Date(event.endDate);
 
-    if (Number.isNaN(startDate.getTime())) {
+    if (now < start) {
       return 'Upcoming';
     }
 
-    if (now < startDate) {
-      return 'Upcoming';
-    }
-
-    if (now >= startDate && now <= endDate) {
+    if (
+      now >= start &&
+      now <= end
+    ) {
       return 'Ongoing';
     }
 
-    return 'Completed';
+    return 'Finished';
   };
+
+
+  // =====================================================
+  // USER REGISTRATION
+  // =====================================================
+
+  const isUserRegistered = (event) => {
+
+    const userId =
+      user?.id || user?._id;
+
+    if (!userId) return false;
+
+    return (
+      event.registeredStudents || []
+    ).some((student) => {
+
+      const id =
+        typeof student === 'string'
+          ? student
+          : student?._id ||
+            student?.id;
+
+      return (
+        String(id) ===
+        String(userId)
+      );
+    });
+  };
+
+
+  // =====================================================
+  // USER ATTENDANCE
+  // =====================================================
+
+  const isUserAttended = (event) => {
+
+    const userId =
+      user?.id || user?._id;
+
+    if (!userId) return false;
+
+    return (
+      event.participants || []
+    ).some((participant) => {
+
+      const id =
+        typeof participant === 'string'
+          ? participant
+          : participant?._id ||
+            participant?.id;
+
+      return (
+        String(id) ===
+        String(userId)
+      );
+    });
+  };
+
 
   // =====================================================
   // REGISTER
   // =====================================================
 
   const handleConfirmRegister = async () => {
+
     if (!selectedEvent) return;
 
-    const eventId = selectedEvent._id;
+    const eventId =
+      selectedEvent._id;
 
     if (
       registeringEvent ||
@@ -232,10 +247,14 @@ const Events = () => {
     ]);
 
     try {
-      await eventAPI.registerForEvent(eventId);
+
+      await eventAPI.registerForEvent(
+        eventId
+      );
 
       setToast({
-        message: 'Successfully registered for event',
+        message:
+          'Successfully registered for event',
         type: 'success'
       });
 
@@ -243,357 +262,437 @@ const Events = () => {
       setSelectedEvent(null);
 
       await fetchEvents();
+
     } catch (error) {
+
       setToast({
         message:
           error.response?.data?.message ||
-          'Error registering for event',
+          'Registration failed',
         type: 'error'
       });
+
     } finally {
+
       setRegisteringEvent(false);
 
       setActionLoadingIds((ids) =>
-        ids.filter((id) => id !== eventId)
+        ids.filter(
+          (id) => id !== eventId
+        )
       );
     }
   };
+
 
   // =====================================================
   // UNREGISTER
   // =====================================================
 
-  const handleUnregisterEvent = async (eventId) => {
-    if (
-      !window.confirm(
-        'Are you sure you want to unregister from this event?'
-      )
-    ) {
-      return;
-    }
+  const handleUnregisterEvent =
+    async (eventId) => {
 
-    if (actionLoadingIds.includes(eventId)) {
-      return;
-    }
+      if (
+        !window.confirm(
+          'Are you sure you want to unregister from this event?'
+        )
+      ) {
+        return;
+      }
 
-    try {
-      setActionLoadingIds((ids) => [
-        ...ids,
-        eventId
-      ]);
+      try {
 
-      await eventAPI.unregisterFromEvent(eventId);
+        setActionLoadingIds((ids) => [
+          ...ids,
+          eventId
+        ]);
 
-      setToast({
-        message: 'Successfully unregistered from event',
-        type: 'success'
-      });
+        await eventAPI.unregisterFromEvent(
+          eventId
+        );
 
-      await fetchEvents();
-    } catch (error) {
-      setToast({
-        message:
-          error.response?.data?.message ||
-          'Error unregistering from event',
-        type: 'error'
-      });
-    } finally {
-      setActionLoadingIds((ids) =>
-        ids.filter((id) => id !== eventId)
-      );
-    }
-  };
+        setToast({
+          message:
+            'Successfully unregistered',
+          type: 'success'
+        });
+
+        await fetchEvents();
+
+      } catch (error) {
+
+        setToast({
+          message:
+            error.response?.data?.message ||
+            'Error unregistering',
+          type: 'error'
+        });
+
+      } finally {
+
+        setActionLoadingIds((ids) =>
+          ids.filter(
+            (id) => id !== eventId
+          )
+        );
+      }
+    };
+
 
   // =====================================================
   // ATTEND EVENT
   // =====================================================
 
-  const handleAttendEvent = async (event) => {
-    const eventId = event._id;
+  const handleAttendEvent =
+    async (eventId) => {
 
-    if (actionLoadingIds.includes(eventId)) {
-      return;
-    }
+      if (
+        actionLoadingIds.includes(eventId)
+      ) {
+        return;
+      }
 
-    const status = getEventStatus(event);
+      try {
 
-    // Attendance is ONLY allowed while ongoing
-    if (status !== 'Ongoing') {
-      setToast({
-        message:
-          status === 'Upcoming'
-            ? 'Attendance will be available when the event starts.'
-            : status === 'Completed'
-            ? 'This event has already ended.'
-            : 'Attendance is not available for this event.',
-        type: 'error'
-      });
+        setActionLoadingIds((ids) => [
+          ...ids,
+          eventId
+        ]);
 
-      return;
-    }
+        const response =
+          await eventAPI.attendEvent(
+            eventId
+          );
 
-    // Student must be registered
-    if (!registeredEventIds.includes(eventId)) {
-      setToast({
-        message:
-          'You must register for this event before attending.',
-        type: 'error'
-      });
+        setToast({
+          message:
+            response.data?.message ||
+            'Attendance marked successfully. Certificate generated.',
+          type: 'success'
+        });
 
-      return;
-    }
+        await fetchEvents();
 
-    try {
-      setActionLoadingIds((ids) => [
-        ...ids,
-        eventId
-      ]);
+      } catch (error) {
 
-      await eventAPI.attendEvent(eventId);
+        setToast({
+          message:
+            error.response?.data?.message ||
+            'Unable to mark attendance',
+          type: 'error'
+        });
 
-      setToast({
-        message:
-          'Attendance marked successfully! Your certificate is now available.',
-        type: 'success'
-      });
+      } finally {
 
-      setAttendedEventIds((ids) => [
-        ...new Set([...ids, eventId])
-      ]);
+        setActionLoadingIds((ids) =>
+          ids.filter(
+            (id) => id !== eventId
+          )
+        );
+      }
+    };
 
-      await fetchEvents();
-    } catch (error) {
-      console.error('Attendance error:', error);
-
-      setToast({
-        message:
-          error.response?.data?.message ||
-          'Unable to mark attendance',
-        type: 'error'
-      });
-    } finally {
-      setActionLoadingIds((ids) =>
-        ids.filter((id) => id !== eventId)
-      );
-    }
-  };
 
   // =====================================================
   // CREATE EVENT
   // =====================================================
 
-  const handleCreateEvent = async (e) => {
-    e.preventDefault();
+  const handleCreateEvent =
+    async (e) => {
 
-    if (
-      !formData.title ||
-      !formData.description ||
-      !formData.date ||
-      !formData.endDate ||
-      !formData.club
-    ) {
-      setToast({
-        message: 'Please fill all required fields',
-        type: 'error'
-      });
+      e.preventDefault();
 
-      return;
-    }
+      if (
+        !formData.title ||
+        !formData.description ||
+        !formData.date ||
+        !formData.endDate ||
+        !formData.club
+      ) {
+        setToast({
+          message:
+            'Please fill all required fields',
+          type: 'error'
+        });
 
-    const start = new Date(formData.date);
-    const end = new Date(formData.endDate);
+        return;
+      }
 
-    if (end <= start) {
-      setToast({
-        message:
-          'End date and time must be after the start date and time.',
-        type: 'error'
-      });
+      if (
+        new Date(formData.endDate) <=
+        new Date(formData.date)
+      ) {
+        setToast({
+          message:
+            'End date/time must be after start date/time',
+          type: 'error'
+        });
 
-      return;
-    }
+        return;
+      }
 
-    try {
-      await eventAPI.createEvent(formData);
+      try {
 
-      setToast({
-        message: 'Event created successfully',
-        type: 'success'
-      });
+        await eventAPI.createEvent(
+          formData
+        );
 
-      setFormData({
-        title: '',
-        description: '',
-        date: '',
-        endDate: '',
-        location: '',
-        club: '',
-        capacity: 120,
-        category: ''
-      });
+        setToast({
+          message:
+            'Event created successfully',
+          type: 'success'
+        });
 
-      setShowForm(false);
+        setFormData({
+          title: '',
+          description: '',
+          date: '',
+          endDate: '',
+          location: '',
+          category: 'General',
+          club: '',
+          capacity: 120
+        });
 
-      await fetchEvents();
-    } catch (error) {
-      setToast({
-        message:
-          error.response?.data?.message ||
-          'Error creating event',
-        type: 'error'
-      });
-    }
-  };
+        setShowForm(false);
+
+        await fetchEvents();
+
+      } catch (error) {
+
+        setToast({
+          message:
+            error.response?.data?.message ||
+            'Error creating event',
+          type: 'error'
+        });
+      }
+    };
+
 
   // =====================================================
   // DELETE EVENT
   // =====================================================
 
-  const handleDeleteEvent = async (eventId) => {
-    if (
-      !window.confirm(
-        'Are you sure you want to delete this event?'
-      )
-    ) {
-      return;
-    }
+  const handleDeleteEvent =
+    async (eventId) => {
 
-    try {
-      await eventAPI.deleteEvent(eventId);
+      if (
+        !window.confirm(
+          'Are you sure you want to delete this event?'
+        )
+      ) {
+        return;
+      }
 
-      setToast({
-        message: 'Event deleted successfully',
-        type: 'success'
-      });
+      try {
 
-      await fetchEvents();
-    } catch (error) {
-      setToast({
-        message:
-          error.response?.data?.message ||
-          'Error deleting event',
-        type: 'error'
-      });
-    }
-  };
+        await eventAPI.deleteEvent(
+          eventId
+        );
+
+        setToast({
+          message:
+            'Event deleted successfully',
+          type: 'success'
+        });
+
+        await fetchEvents();
+
+      } catch (error) {
+
+        setToast({
+          message:
+            error.response?.data?.message ||
+            'Error deleting event',
+          type: 'error'
+        });
+      }
+    };
+
 
   // =====================================================
   // FORMAT DATE
   // =====================================================
 
   const formatDate = (dateString) => {
+
     if (!dateString) {
       return 'TBD';
     }
 
-    const date = new Date(dateString);
-
-    if (Number.isNaN(date.getTime())) {
-      return 'TBD';
-    }
-
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return new Date(
+      dateString
+    ).toLocaleString(
+      'en-IN',
+      {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      }
+    );
   };
 
-  // =====================================================
-  // GET CATEGORIES
-  // =====================================================
-
-  const categories = useMemo(() => {
-    const values = events
-      .map((event) => event.category)
-      .filter(Boolean);
-
-    return [...new Set(values)];
-  }, [events]);
 
   // =====================================================
   // FILTER EVENTS
   // =====================================================
 
-  const filteredEvents = useMemo(() => {
-    return events.filter((event) => {
-      const search = searchTerm
-        .trim()
-        .toLowerCase();
+  const filteredEvents =
+    useMemo(() => {
 
-      const matchesSearch =
-        !search ||
-        event.title
-          ?.toLowerCase()
-          .includes(search) ||
-        event.description
-          ?.toLowerCase()
-          .includes(search) ||
-        event.location
-          ?.toLowerCase()
-          .includes(search) ||
-        event.category
-          ?.toLowerCase()
-          .includes(search) ||
-        event.club?.clubName
-          ?.toLowerCase()
-          .includes(search);
+      let result =
+        [...events];
 
-      const matchesCategory =
-        categoryFilter === 'all' ||
-        event.category === categoryFilter;
+      // SEARCH
+      if (search.trim()) {
 
-      const eventClubId =
-        typeof event.club === 'string'
-          ? event.club
-          : event.club?._id;
+        const query =
+          search
+            .toLowerCase()
+            .trim();
 
-      const matchesClub =
-        clubFilter === 'all' ||
-        eventClubId === clubFilter;
+        result =
+          result.filter((event) => {
 
-      const matchesStatus =
-        statusFilter === 'all' ||
-        getEventStatus(event).toLowerCase() ===
-          statusFilter.toLowerCase();
+            const title =
+              event.title
+                ?.toLowerCase() || '';
 
-      return (
-        matchesSearch &&
-        matchesCategory &&
-        matchesClub &&
-        matchesStatus
-      );
-    });
-  }, [
-    events,
-    searchTerm,
-    categoryFilter,
-    clubFilter,
-    statusFilter
-  ]);
+            const description =
+              event.description
+                ?.toLowerCase() || '';
+
+            const location =
+              event.location
+                ?.toLowerCase() || '';
+
+            const category =
+              event.category
+                ?.toLowerCase() || '';
+
+            const clubName =
+              event.club?.clubName
+                ?.toLowerCase() || '';
+
+            return (
+              title.includes(query) ||
+              description.includes(query) ||
+              location.includes(query) ||
+              category.includes(query) ||
+              clubName.includes(query)
+            );
+          });
+      }
+
+      // STATUS
+      if (
+        statusFilter !== 'all'
+      ) {
+
+        result =
+          result.filter(
+            (event) =>
+              getEventStatus(event)
+                .toLowerCase() ===
+              statusFilter
+          );
+      }
+
+      // CATEGORY
+      if (
+        categoryFilter !== 'all'
+      ) {
+
+        result =
+          result.filter(
+            (event) =>
+              (
+                event.category ||
+                'General'
+              ) === categoryFilter
+          );
+      }
+
+      // CLUB
+      if (
+        clubFilter !== 'all'
+      ) {
+
+        result =
+          result.filter(
+            (event) =>
+              event.club?._id ===
+              clubFilter ||
+              event.club ===
+              clubFilter
+          );
+      }
+
+      // SORT
+      result.sort((a, b) => {
+
+        if (sortBy === 'date') {
+
+          return (
+            new Date(a.date) -
+            new Date(b.date)
+          );
+        }
+
+        if (sortBy === 'newest') {
+
+          return (
+            new Date(b.createdAt || b.date) -
+            new Date(a.createdAt || a.date)
+          );
+        }
+
+        if (sortBy === 'title') {
+
+          return a.title.localeCompare(
+            b.title
+          );
+        }
+
+        return 0;
+      });
+
+      return result;
+
+    }, [
+      events,
+      search,
+      statusFilter,
+      categoryFilter,
+      clubFilter,
+      sortBy
+    ]);
+
 
   // =====================================================
-  // RESET FILTERS
+  // CATEGORIES
   // =====================================================
 
-  const clearFilters = () => {
-    setSearchTerm('');
-    setCategoryFilter('all');
-    setClubFilter('all');
-    setStatusFilter('all');
-  };
+  const categories =
+    [
+      ...new Set(
+        events.map(
+          (event) =>
+            event.category ||
+            'General'
+        )
+      )
+    ];
 
-  // =====================================================
-  // LOADING
-  // =====================================================
 
   if (loading) {
     return (
-      <LoadingScreen message="Loading events..." />
+      <LoadingScreen
+        message="Loading events..."
+      />
     );
   }
+
 
   // =====================================================
   // UI
@@ -601,26 +700,29 @@ const Events = () => {
 
   return (
     <div className="app-page">
+
       <Navbar />
 
       {toast && (
         <Toast
           message={toast.message}
           type={toast.type}
-          onClose={() => setToast(null)}
+          onClose={() =>
+            setToast(null)
+          }
         />
       )}
 
       <main className="page-section pt-8">
+
         <div className="page-container">
 
-          {/* =================================================
-              HEADER
-          ================================================= */}
+          {/* HEADER */}
 
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
 
             <div>
+
               <span className="eyebrow">
                 Campus calendar
               </span>
@@ -630,546 +732,712 @@ const Events = () => {
               </h1>
 
               <p className="section-copy mt-4">
-                Discover events, register, attend ongoing
-                events, and earn certificates.
+                Discover campus events, register,
+                attend and earn certificates.
               </p>
+
             </div>
 
             {user?.role === 'admin' && (
               <button
                 type="button"
                 onClick={() =>
-                  setShowForm((open) => !open)
+                  setShowForm(
+                    (value) => !value
+                  )
                 }
                 className="btn-primary"
               >
                 <Plus size={18} />
-                Create event
+
+                {showForm
+                  ? 'Close'
+                  : 'Create event'}
               </button>
             )}
+
           </div>
 
-          {/* =================================================
-              SEARCH + FILTER
-          ================================================= */}
+
+          {/* CREATE EVENT */}
+
+          {showForm &&
+            user?.role === 'admin' && (
+
+              <form
+                onSubmit={
+                  handleCreateEvent
+                }
+                className="app-card mb-8 space-y-5"
+              >
+
+                <h2 className="text-2xl font-black text-black">
+                  Create new event
+                </h2>
+
+
+                <div className="grid gap-5 md:grid-cols-2">
+
+                  <div>
+
+                    <label className="field-label">
+                      Event title *
+                    </label>
+
+                    <input
+                      value={
+                        formData.title
+                      }
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          title:
+                            e.target.value
+                        })
+                      }
+                      className="field"
+                      placeholder="Tech Workshop"
+                      required
+                    />
+
+                  </div>
+
+
+                  <div>
+
+                    <label className="field-label">
+                      Club *
+                    </label>
+
+                    <select
+                      value={
+                        formData.club
+                      }
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          club:
+                            e.target.value
+                        })
+                      }
+                      className="field"
+                      required
+                    >
+
+                      <option value="">
+                        Select a club
+                      </option>
+
+                      {clubs.map(
+                        (club) => (
+
+                          <option
+                            key={
+                              club._id
+                            }
+                            value={
+                              club._id
+                            }
+                          >
+                            {
+                              club.clubName
+                            }
+                          </option>
+
+                        )
+                      )}
+
+                    </select>
+
+                  </div>
+
+                </div>
+
+
+                <div>
+
+                  <label className="field-label">
+                    Description *
+                  </label>
+
+                  <textarea
+                    value={
+                      formData.description
+                    }
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        description:
+                          e.target.value
+                      })
+                    }
+                    className="field min-h-28"
+                    placeholder="Describe the event"
+                    required
+                  />
+
+                </div>
+
+
+                {/* START + END */}
+
+                <div className="grid gap-5 md:grid-cols-2">
+
+                  <div>
+
+                    <label className="field-label">
+                      Start date & time *
+                    </label>
+
+                    <input
+                      type="datetime-local"
+                      value={ formData.date }
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          date:
+                            e.target.value
+                        })
+                      }
+                      className="field"
+                      required
+                    />
+
+                  </div>
+
+
+                  <div>
+
+                    <label className="field-label">
+                      End date & time *
+                    </label>
+
+                    <input
+                      type="datetime-local"
+                      value={
+                        formData.endDate
+                      }
+                      min={
+                        formData.date ||
+                        undefined
+                      }
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          endDate:
+                            e.target.value
+                        })
+                      }
+                      className="field"
+                      required
+                    />
+
+                  </div>
+
+                </div>
+
+
+                <div className="grid gap-5 md:grid-cols-3">
+
+                  <div>
+
+                    <label className="field-label">
+                      Location
+                    </label>
+
+                    <input
+                      value={
+                        formData.location
+                      }
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          location:
+                            e.target.value
+                        })
+                      }
+                      className="field"
+                      placeholder="Room 101"
+                    />
+
+                  </div>
+
+
+                  <div>
+
+                    <label className="field-label">
+                      Category
+                    </label>
+
+                    <input
+                      value={
+                        formData.category
+                      }
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          category:
+                            e.target.value
+                        })
+                      }
+                      className="field"
+                      placeholder="Technical"
+                    />
+
+                  </div>
+
+
+                  <div>
+
+                    <label className="field-label">
+                      Capacity
+                    </label>
+
+                    <input
+                      type="number"
+                      min="1"
+                      value={
+                        formData.capacity
+                      }
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          capacity:
+                            Number(
+                              e.target.value
+                            )
+                        })
+                      }
+                      className="field"
+                    />
+
+                  </div>
+
+                </div>
+
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                  >
+                    Create event
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowForm(false)
+                    }
+                    className="btn-secondary"
+                  >
+                    Cancel
+                  </button>
+
+                </div>
+
+              </form>
+
+            )}
+
+
+          {/* SEARCH + FILTER */}
 
           <div className="app-card mb-8">
 
             <div className="flex items-center gap-2 mb-5">
-              <Filter
+
+              <Search
                 size={20}
                 className="text-[#145f82]"
               />
 
-              <h2 className="text-xl font-black text-black">
+              <h2 className="text-xl font-black">
                 Find events
               </h2>
+
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 
-              {/* Search */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
 
-              <div className="lg:col-span-2 relative">
-                <label className="field-label">
-                  Search events
-                </label>
+              <div className="lg:col-span-2">
 
-                <div className="relative">
-                  <Search
-                    size={18}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
-
-                  <input
-                    value={searchTerm}
-                    onChange={(e) =>
-                      setSearchTerm(e.target.value)
-                    }
-                    className="field pl-10"
-                    placeholder="Search by title, location, club..."
-                  />
-                </div>
-              </div>
-
-              {/* Category */}
-
-              <div>
-                <label className="field-label">
-                  Category
-                </label>
-
-                <select
-                  value={categoryFilter}
+                <input
+                  value={search}
                   onChange={(e) =>
-                    setCategoryFilter(e.target.value)
+                    setSearch(
+                      e.target.value
+                    )
                   }
                   className="field"
-                >
-                  <option value="all">
-                    All categories
-                  </option>
+                  placeholder="Search events..."
+                />
 
-                  {categories.map((category) => (
+              </div>
+
+
+              <select
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(
+                    e.target.value
+                  )
+                }
+                className="field"
+              >
+
+                <option value="all">
+                  All statuses
+                </option>
+
+                <option value="upcoming">
+                  Upcoming
+                </option>
+
+                <option value="ongoing">
+                  Ongoing
+                </option>
+
+                <option value="finished">
+                  Finished
+                </option>
+
+                <option value="cancelled">
+                  Cancelled
+                </option>
+
+              </select>
+
+
+              <select
+                value={categoryFilter}
+                onChange={(e) =>
+                  setCategoryFilter(
+                    e.target.value
+                  )
+                }
+                className="field"
+              >
+
+                <option value="all">
+                  All categories
+                </option>
+
+                {categories.map(
+                  (category) => (
+
                     <option
                       key={category}
                       value={category}
                     >
                       {category}
                     </option>
-                  ))}
-                </select>
-              </div>
 
-              {/* Status */}
+                  )
+                )}
 
-              <div>
-                <label className="field-label">
-                  Status
-                </label>
+              </select>
 
-                <select
-                  value={statusFilter}
-                  onChange={(e) =>
-                    setStatusFilter(e.target.value)
-                  }
-                  className="field"
-                >
-                  <option value="all">
-                    All status
-                  </option>
 
-                  <option value="upcoming">
-                    Upcoming
-                  </option>
+              <select
+                value={clubFilter}
+                onChange={(e) =>
+                  setClubFilter(
+                    e.target.value
+                  )
+                }
+                className="field"
+              >
 
-                  <option value="ongoing">
-                    Ongoing
-                  </option>
+                <option value="all">
+                  All clubs
+                </option>
 
-                  <option value="completed">
-                    Completed
-                  </option>
+                {clubs.map(
+                  (club) => (
 
-                  <option value="cancelled">
-                    Cancelled
-                  </option>
-                </select>
-              </div>
-            </div>
-
-            {/* Club filter + clear */}
-
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-
-              <div className="flex-1">
-                <label className="field-label">
-                  Club
-                </label>
-
-                <select
-                  value={clubFilter}
-                  onChange={(e) =>
-                    setClubFilter(e.target.value)
-                  }
-                  className="field"
-                >
-                  <option value="all">
-                    All clubs
-                  </option>
-
-                  {clubs.map((club) => (
                     <option
                       key={club._id}
                       value={club._id}
                     >
-                      {club.clubName}
+                      {
+                        club.clubName
+                      }
                     </option>
-                  ))}
-                </select>
-              </div>
+
+                  )
+                )}
+
+              </select>
+
+            </div>
+
+
+            <div className="mt-4 flex flex-col sm:flex-row gap-3">
+
+              <select
+                value={sortBy}
+                onChange={(e) =>
+                  setSortBy(
+                    e.target.value
+                  )
+                }
+                className="field sm:w-52"
+              >
+
+                <option value="date">
+                  Sort by date
+                </option>
+
+                <option value="newest">
+                  Newest
+                </option>
+
+                <option value="title">
+                  Title
+                </option>
+
+              </select>
+
 
               <button
                 type="button"
-                onClick={clearFilters}
-                className="btn-secondary flex items-center justify-center gap-2"
+                onClick={() => {
+
+                  setSearch('');
+                  setStatusFilter('all');
+                  setCategoryFilter('all');
+                  setClubFilter('all');
+                  setSortBy('date');
+
+                }}
+                className="btn-secondary"
               >
-                <X size={16} />
                 Clear filters
               </button>
+
             </div>
 
-            <div className="mt-4 text-sm font-semibold text-slate-500">
-              Showing {filteredEvents.length} of{' '}
-              {events.length} events
-            </div>
           </div>
 
-          {/* =================================================
-              CREATE EVENT
-          ================================================= */}
 
-          {showForm && user?.role === 'admin' && (
-            <form
-              onSubmit={handleCreateEvent}
-              className="app-card mb-8 space-y-5"
-            >
+          {/* EVENT COUNT */}
 
-              <h2 className="text-2xl font-black text-black">
-                Create new event
-              </h2>
+          <div className="mb-5">
 
-              <div className="grid gap-5 md:grid-cols-2">
+            <p className="text-sm font-bold text-slate-500">
+              {filteredEvents.length}{' '}
+              event
+              {filteredEvents.length !== 1
+                ? 's'
+                : ''}{' '}
+              found
+            </p>
 
-                <div>
-                  <label className="field-label">
-                    Event title *
-                  </label>
+          </div>
 
-                  <input
-                    value={formData.title}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        title: e.target.value
-                      })
-                    }
-                    className="field"
-                    placeholder="Tech Workshop"
-                    required
-                  />
-                </div>
 
-                <div>
-                  <label className="field-label">
-                    Club *
-                  </label>
-
-                  <select
-                    value={formData.club}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        club: e.target.value
-                      })
-                    }
-                    className="field"
-                    required
-                  >
-                    <option value="">
-                      Select a club
-                    </option>
-
-                    {clubs.map((club) => (
-                      <option
-                        key={club._id}
-                        value={club._id}
-                      >
-                        {club.clubName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="field-label">
-                  Description *
-                </label>
-
-                <textarea
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      description: e.target.value
-                    })
-                  }
-                  className="field min-h-28"
-                  placeholder="Describe the event"
-                  required
-                />
-              </div>
-
-              <div className="grid gap-5 md:grid-cols-2">
-
-                <div>
-                  <label className="field-label">
-                    Start date & time *
-                  </label>
-
-                  <input
-                    type="datetime-local"
-                    value={formData.date}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        date: e.target.value
-                      })
-                    }
-                    className="field"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="field-label">
-                    End date & time *
-                  </label>
-
-                  <input
-                    type="datetime-local"
-                    value={formData.endDate}
-                    min={formData.date || undefined}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        endDate: e.target.value
-                      })
-                    }
-                    className="field"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-5 md:grid-cols-3">
-
-                <div>
-                  <label className="field-label">
-                    Location
-                  </label>
-
-                  <input
-                    value={formData.location}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        location: e.target.value
-                      })
-                    }
-                    className="field"
-                    placeholder="Room 101"
-                  />
-                </div>
-
-                <div>
-                  <label className="field-label">
-                    Capacity
-                  </label>
-
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.capacity}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        capacity:
-                          Number(e.target.value)
-                      })
-                    }
-                    className="field"
-                  />
-                </div>
-
-                <div>
-                  <label className="field-label">
-                    Category
-                  </label>
-
-                  <input
-                    value={formData.category}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        category: e.target.value
-                      })
-                    }
-                    className="field"
-                    placeholder="Technical"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row">
-
-                <button
-                  type="submit"
-                  className="btn-primary"
-                >
-                  Create event
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setShowForm(false)
-                  }
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-
-              </div>
-            </form>
-          )}
-
-          {/* =================================================
-              EVENTS
-          ================================================= */}
+          {/* EVENTS */}
 
           {filteredEvents.length > 0 ? (
 
             <div className="grid gap-5 lg:grid-cols-2">
 
-              {filteredEvents.map((event) => {
+              {filteredEvents.map(
+                (event) => {
 
-                const isRegistered =
-                  registeredEventIds.includes(
-                    event._id
-                  );
+                  const status =
+                    getEventStatus(
+                      event
+                    );
 
-                const isAttended =
-                  attendedEventIds.includes(
-                    event._id
-                  );
+                  const registered =
+                    isUserRegistered(
+                      event
+                    );
 
-                const isFull =
-                  (event.registeredStudents?.length ||
-                    0) >= event.capacity;
+                  const attended =
+                    isUserAttended(
+                      event
+                    );
 
-                const eventStatus =
-                  getEventStatus(event);
+                  const full =
+                    (
+                      event.registeredStudents
+                        ?.length || 0
+                    ) >=
+                    event.capacity;
 
-                const isLoading =
-                  actionLoadingIds.includes(
-                    event._id
-                  );
+                  const loadingAction =
+                    actionLoadingIds.includes(
+                      event._id
+                    );
 
-                return (
-                  <article
-                    key={event._id}
-                    className="app-card app-card-hover"
-                  >
 
-                    {/* HEADER */}
+                  return (
 
-                    <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <article
+                      key={event._id}
+                      className="app-card app-card-hover"
+                    >
 
-                      <div>
-                        <h3 className="text-2xl font-black text-black">
-                          {event.title}
-                        </h3>
+                      {/* HEADER */}
 
-                        <p className="mt-2 text-sm leading-6 text-slate-600">
-                          {event.description}
-                        </p>
+                      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 
-                        {event.category && (
-                          <span className="inline-block mt-3 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold">
-                            {event.category}
-                          </span>
-                        )}
-                      </div>
+                        <div>
 
-                      <span
-                        className={`chip ${
-                          eventStatus ===
-                          'Completed'
-                            ? 'bg-red-100 text-red-700 border border-red-200'
-                            : eventStatus ===
-                              'Ongoing'
-                            ? 'bg-yellow-100 text-yellow-700 border border-yellow-200'
-                            : eventStatus ===
-                              'Cancelled'
-                            ? 'bg-gray-100 text-gray-700 border border-gray-200'
-                            : 'bg-green-100 text-green-700 border border-green-200'
-                        }`}
-                      >
-                        {eventStatus}
-                      </span>
+                          <h3 className="text-2xl font-black text-black">
+                            {event.title}
+                          </h3>
 
-                    </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-600">
+                            {
+                              event.description
+                            }
+                          </p>
 
-                    {/* EVENT INFORMATION */}
+                        </div>
 
-                    <div className="mb-5 grid gap-3 text-sm font-bold text-slate-600">
 
-                      <div className="flex items-center gap-2">
-                        <Calendar
-                          size={17}
-                          className="text-[#145f82]"
-                        />
-
-                        <span>
-                          {formatDate(event.date)}
+                        <span
+                          className={`chip ${
+                            status ===
+                            'Finished'
+                              ? 'bg-red-100 text-red-700 border border-red-200'
+                              : status ===
+                                'Ongoing'
+                              ? 'bg-yellow-100 text-yellow-700 border border-yellow-200'
+                              : status ===
+                                'Cancelled'
+                              ? 'bg-gray-100 text-gray-700 border border-gray-200'
+                              : 'bg-green-100 text-green-700 border border-green-200'
+                          }`}
+                        >
+                          {status}
                         </span>
+
                       </div>
 
-                      {event.endDate && (
+
+                      {/* DETAILS */}
+
+                      <div className="mb-5 grid gap-3 text-sm font-bold text-slate-600">
+
                         <div className="flex items-center gap-2">
+
+                          <Calendar
+                            size={17}
+                            className="text-[#145f82]"
+                          />
+
+                          Start:{' '}
+                          {formatDate(
+                            event.date
+                          )}
+
+                        </div>
+
+
+                        <div className="flex items-center gap-2">
+
                           <Clock
                             size={17}
                             className="text-[#145f82]"
                           />
 
-                          <span>
-                            Ends:{' '}
-                            {formatDate(
-                              event.endDate
-                            )}
-                          </span>
+                          End:{' '}
+                          {formatDate(
+                            event.endDate
+                          )}
+
                         </div>
-                      )}
 
-                      <div className="flex items-center gap-2">
-                        <MapPin
-                          size={17}
-                          className="text-[#145f82]"
-                        />
 
-                        {event.location ||
-                          'To be announced'}
+                        <div className="flex items-center gap-2">
+
+                          <MapPin
+                            size={17}
+                            className="text-[#145f82]"
+                          />
+
+                          {
+                            event.location ||
+                            'To be announced'
+                          }
+
+                        </div>
+
+
+                        <div className="flex items-center gap-2">
+
+                          <Users
+                            size={17}
+                            className="text-[#145f82]"
+                          />
+
+                          {
+                            event.registeredStudents
+                              ?.length ||
+                            0
+                          }{' '}
+                          /{' '}
+                          {event.capacity}{' '}
+                          registered
+
+                        </div>
+
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <Users
-                          size={17}
-                          className="text-[#145f82]"
-                        />
 
-                        {event.registeredStudents
-                          ?.length || 0}{' '}
-                        / {event.capacity}{' '}
-                        registered
-                      </div>
+                      {/* ACTIONS */}
 
-                      {event.club?.clubName && (
-                        <div className="text-sm text-slate-500">
-                          Club:{' '}
-                          <span className="font-bold text-slate-700">
-                            {event.club.clubName}
-                          </span>
-                        </div>
-                      )}
+                      <div className="flex flex-wrap gap-2 mt-auto">
 
-                    </div>
 
-                    {/* =================================================
-                        ACTIONS
-                    ================================================= */}
+                        {/* REGISTER */}
 
-                    <div className="flex flex-wrap gap-2 mt-auto">
+                        {!registered &&
+                          status ===
+                            'Upcoming' && (
 
-                      {/* ---------------------------------------------
-                          UPCOMING
-                      --------------------------------------------- */}
+                            <button
+                              type="button"
+                              onClick={() => {
 
-                      {eventStatus ===
-                        'Upcoming' && (
-                        <>
-                          {isRegistered ? (
+                                setSelectedEvent(
+                                  event
+                                );
+
+                                setShowRegisterModal(
+                                  true
+                                );
+
+                              }}
+                              disabled={
+                                full ||
+                                loadingAction
+                              }
+                              className="btn-primary flex-1"
+                            >
+
+                              {full
+                                ? 'Full'
+                                : 'Register'}
+
+                            </button>
+
+                          )}
+
+
+                        {/* UNREGISTER */}
+
+                        {registered &&
+                          status ===
+                            'Upcoming' && (
+
                             <button
                               type="button"
                               onClick={() =>
@@ -1177,144 +1445,119 @@ const Events = () => {
                                   event._id
                                 )
                               }
-                              disabled={isLoading}
-                              className="btn-danger flex-1 whitespace-nowrap text-xs sm:text-sm px-2"
-                            >
-                              {isLoading
-                                ? 'Processing...'
-                                : 'Tap to unregister'}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedEvent(
-                                  event
-                                );
-                                setShowRegisterModal(
-                                  true
-                                );
-                              }}
                               disabled={
-                                isFull ||
-                                isLoading
+                                loadingAction
                               }
-                              className="btn-primary flex-1"
+                              className="btn-danger flex-1"
                             >
-                              {isFull
-                                ? 'Full'
-                                : 'Register'}
+                              Tap to unregister
                             </button>
+
                           )}
-                        </>
-                      )}
 
-                      {/* ---------------------------------------------
-                          ONGOING
-                      --------------------------------------------- */}
 
-                      {eventStatus ===
-                        'Ongoing' && (
-                        <>
-                          {!isRegistered ? (
-                            <button
-                              type="button"
-                              disabled
-                              className="btn-secondary flex-1"
-                            >
-                              Register first
-                            </button>
-                          ) : isAttended ? (
-                            <button
-                              type="button"
-                              disabled
-                              className="flex-1 px-4 py-2 rounded-lg bg-green-100 text-green-700 font-bold flex items-center justify-center gap-2"
-                            >
-                              <CheckCircle
-                                size={18}
-                              />
-                              Attended
-                            </button>
-                          ) : (
+                        {/* ATTEND */}
+
+                        {registered &&
+                          status ===
+                            'Ongoing' &&
+                          !attended && (
+
                             <button
                               type="button"
                               onClick={() =>
                                 handleAttendEvent(
-                                  event
+                                  event._id
                                 )
                               }
-                              disabled={isLoading}
+                              disabled={
+                                loadingAction
+                              }
                               className="btn-primary flex-1 flex items-center justify-center gap-2"
                             >
+
                               <CheckCircle
                                 size={18}
                               />
 
-                              {isLoading
+                              {loadingAction
                                 ? 'Marking...'
-                                : 'Attend Event'}
+                                : 'Attend'}
+
                             </button>
+
                           )}
-                        </>
-                      )}
 
-                      {/* ---------------------------------------------
-                          COMPLETED
-                      --------------------------------------------- */}
 
-                      {eventStatus ===
-                        'Completed' && (
-                        <>
-                          {isAttended ? (
-                            <div className="flex-1 px-4 py-2 rounded-lg bg-green-50 text-green-700 font-bold flex items-center justify-center gap-2">
-                              <Award size={18} />
+                        {/* ATTENDED */}
 
-                              Certificate Available
-                            </div>
-                          ) : (
-                            <div className="flex-1 px-4 py-2 rounded-lg bg-slate-100 text-slate-500 font-semibold text-center">
-                              Event completed
-                            </div>
+                        {attended && (
+
+                          <div className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-green-100 text-green-700 font-bold px-4 py-3">
+
+                            <CheckCircle
+                              size={18}
+                            />
+
+                            Attended
+
+                          </div>
+
+                        )}
+
+
+                        {/* REGISTERED BUT EVENT NOT ONGOING */}
+
+                        {registered &&
+                          !attended &&
+                          status ===
+                            'Upcoming' && (
+
+                            <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
+
+                              <Clock
+                                size={14}
+                              />
+
+                              Attend button
+                              appears when
+                              event starts
+
+                            </span>
+
                           )}
-                        </>
-                      )}
 
-                      {/* ---------------------------------------------
-                          CANCELLED
-                      --------------------------------------------- */}
 
-                      {eventStatus ===
-                        'Cancelled' && (
-                        <div className="flex-1 px-4 py-2 rounded-lg bg-gray-100 text-gray-500 font-semibold text-center">
-                          Event cancelled
-                        </div>
-                      )}
+                        {/* ADMIN DELETE */}
 
-                      {/* ---------------------------------------------
-                          ADMIN DELETE
-                      --------------------------------------------- */}
+                        {user?.role ===
+                          'admin' && (
 
-                      {user?.role ===
-                        'admin' && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleDeleteEvent(
-                              event._id
-                            )
-                          }
-                          className="btn-secondary px-3"
-                          aria-label={`Delete ${event.title}`}
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDeleteEvent(
+                                event._id
+                              )
+                            }
+                            className="btn-secondary px-3"
+                            aria-label={`Delete ${event.title}`}
+                          >
+                            <Trash2
+                              size={18}
+                            />
+                          </button>
 
-                    </div>
+                        )}
 
-                  </article>
-                );
-              })}
+                      </div>
+
+                    </article>
+
+                  );
+
+                }
+              )}
 
             </div>
 
@@ -1322,47 +1565,45 @@ const Events = () => {
 
             <div className="app-card text-center">
 
-              <Search
-                size={40}
-                className="mx-auto mb-4 text-slate-300"
-              />
-
               <p className="text-lg font-bold text-slate-500">
-                No events found.
+                No events match your filters.
               </p>
-
-              <p className="mt-2 text-sm text-slate-400">
-                Try changing your search or filters.
-              </p>
-
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="btn-secondary mt-5"
-              >
-                Clear filters
-              </button>
 
             </div>
+
           )}
 
         </div>
+
       </main>
 
-      {/* =====================================================
-          REGISTER MODAL
-      ===================================================== */}
+
+      {/* REGISTER MODAL */}
 
       <RegisterEventModal
         event={selectedEvent}
-        isOpen={showRegisterModal}
+        isOpen={
+          showRegisterModal
+        }
         onClose={() => {
-          setShowRegisterModal(false);
-          setSelectedEvent(null);
+
+          setShowRegisterModal(
+            false
+          );
+
+          setSelectedEvent(
+            null
+          );
+
         }}
-        onConfirm={handleConfirmRegister}
-        loading={registeringEvent}
+        onConfirm={
+          handleConfirmRegister
+        }
+        loading={
+          registeringEvent
+        }
       />
+
     </div>
   );
 };
