@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Compass, Lock, Mail, User } from 'lucide-react';
+import { Compass, GraduationCap , Lock, Mail, User } from 'lucide-react';
 import { authAPI } from '../services/api';
 import Toast from '../components/Toast';
 
@@ -64,11 +64,18 @@ const Register = () => {
     <div className="auth-shell">
       {showToast && <Toast message="Account created. Redirecting..." type="success" onClose={() => setShowToast(false)} />}
       <div className="auth-card">
-        <button type="button" onClick={() => navigate('/')} className="mx-auto mb-7 flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black text-white">
-            <Compass size={21} />
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="mx-auto mb-7 flex items-center gap-3"
+        >
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
+            <GraduationCap size={22} strokeWidth={1.8} />
           </span>
-          <span className="text-xl font-black text-black">Campus Clubs</span>
+        
+          <span className="text-xl font-black text-black">
+            Campus Clubs
+          </span>
         </button>
 
         <div className="mb-8 text-center">

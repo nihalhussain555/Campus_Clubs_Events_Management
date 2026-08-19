@@ -376,51 +376,25 @@ const Navbar = () => {
         ================================================= */}
 
         <button
-          type="button"
-          onClick={() => {
-
-            closeMenu();
-
-            navigate('/');
-
-          }}
-          className="flex items-center gap-3 rounded-full pr-3 text-left"
-          aria-label="Go to home"
-        >
-
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#145f82] text-white">
-
-            <Compass size={20} />
-
-          </span>
-
-
-          <span className="text-lg font-black tracking-normal text-[#073c57]">
-
-            <div className="flex items-center gap-2.5">
-
-              <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center shadow-sm">
-
-                <GraduationCap
-                  size={22}
-                  strokeWidth={1.8}
-                  className="text-white"
-                />
-
-              </div>
-
-
-              <span className="text-lg font-extrabold tracking-tight text-slate-900">
-
-                Campus Clubs
-
-              </span>
-
+            type="button"
+            onClick={() => {
+              closeMenu();
+              navigate('/');
+            }}
+            className="flex items-center gap-2.5 text-left"
+            aria-label="Go to home" >
+            <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center shadow-sm">
+              <GraduationCap
+                size={22}
+                strokeWidth={1.8}
+                className="text-white"
+              />
             </div>
 
-          </span>
-
-        </button>
+            <span className="text-lg font-extrabold tracking-tight text-slate-900">
+              Campus Clubs
+            </span>
+          </button>
 
 
         {/* =================================================
