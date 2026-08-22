@@ -274,7 +274,7 @@ export const verifyCertificate = async (
 ) => {
   try {
     const token =
-      req.params.qrToken;
+      req.params.Token;
 
     if (!token) {
       return res.status(400).json({
