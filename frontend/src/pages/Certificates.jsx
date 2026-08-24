@@ -159,11 +159,10 @@ const Certificates = () => {
   // =====================================================
 
   const getVerifyUrl = (certificate) => {
-    return (
-      certificate.verificationUrl ||
-      `${window.location.origin}/verify-certificate/${certificate.qrToken}`
-    );
-  };
+  const host = window.location.hostname;
+
+  return `http://${host}:3000/verify-certificate/${certificate.qrToken}`;
+};
 
   // =====================================================
   // LOADING

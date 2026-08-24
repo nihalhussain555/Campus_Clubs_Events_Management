@@ -264,76 +264,86 @@ export const getCertificateById = async (
 };
 
 
-/* =========================================================
-   VERIFY CERTIFICATE
-========================================================= */
+/// =====================================================
+// VERIFY CERTIFICATE - PUBLIC
+// =====================================================
 
-export const verifyCertificate = async (
-  req,
-  res
-) => {
+export const verifyCertificate = async (req, res) => {
   try {
-    const token =
-      req.params.Token;
+    const { qrToken } = req.params;
 
-    if (!token) {
+    console.log("=================================");
+    console.log("CERTIFICATE VERIFICATION REQUEST");
+    console.log("QR Token:", qrToken);
+    console.log("=================================");
+
+    // Validate token
+    if (!qrToken || !qrToken.trim()) {
       return res.status(400).json({
-        success: false,
         verified: false,
-        message:
-          "Certificate verification token is required",
+        certificate: null,
+        message: "Verification token is required",
       });
     }
 
-    const certificate =
-      await Certificate.findOne({
-        $or: [
-          {
-            qrToken: token,
-          },
-          {
-            certificateId: token,
-          },
-        ],
-      })
-        .populate(
-          "user",
-          "name email"
-        )
-        .populate("event");
+    // Find certificate using QR token
+    const certificate = await Certificate.findOne({
+      qrToken: qrToken.trim(),
+    }).lean();
 
+    // Certificate not found
     if (!certificate) {
+      console.log("Certificate NOT FOUND");
+
       return res.status(404).json({
-        success: false,
         verified: false,
-        message:
-          "Invalid certificate",
+        certificate: null,
+        message: "Certificate not found",
       });
     }
 
-    return res.json({
-      success: true,
+    console.log("Certificate FOUND:", certificate.certificateId);
 
+    // Check certificate validity
+    if (certificate.verified !== true) {
+      console.log("Certificate is marked invalid");
+
+      return res.status(200).json({
+        verified: false,
+        certificate: null,
+        message: "Certificate is invalid",
+      });
+    }
+
+    // Return certificate
+    return res.status(200).json({
       verified: true,
-
-      certificate,
+      certificate: {
+        _id: certificate._id,
+        certificateId: certificate.certificateId,
+        studentName: certificate.studentName,
+        eventName: certificate.eventName,
+        eventDate: certificate.eventDate,
+        endDate: certificate.endDate,
+        issuedAt: certificate.issuedAt,
+        qrToken: certificate.qrToken,
+        clubName: certificate.clubName,
+        category: certificate.category,
+        verified: certificate.verified,
+      },
+      message: "Certificate verified successfully",
     });
   } catch (error) {
-    console.error(
-      "Certificate verification error:",
-      error
-    );
+    console.error("VERIFY CERTIFICATE ERROR:", error);
 
     return res.status(500).json({
-      success: false,
       verified: false,
-      message:
-        "Certificate verification failed",
+      certificate: null,
+      message: "Failed to verify certificate",
+      error: error.message,
     });
   }
 };
-
-
 /* =========================================================
    DOWNLOAD CERTIFICATE PDF
 ========================================================= */

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 
 import {
   CheckCircle,
@@ -15,50 +16,32 @@ import LoadingScreen from "../components/LoadingScreen";
 import { certificateAPI } from "../services/api";
 
 const VerifyCertificate = () => {
+  const { qrToken } = useParams();
+
   const [certificate, setCertificate] = useState(null);
   const [valid, setValid] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const verifyCertificate = async () => {
+      if (!qrToken) {
+        setValid(false);
+        setLoading(false);
+        return;
+      }
+
       try {
-        // URL:
-        // /verify-certificate/:qrToken
+        console.log("QR Token:", qrToken);
 
-        const pathParts =
-          window.location.pathname
-            .split("/")
-            .filter(Boolean);
+        const response = await certificateAPI.verifyCertificate(qrToken);
 
-        const token =
-          pathParts[pathParts.length - 1];
-
-        if (!token) {
-          setValid(false);
-          return;
-        }
-
-        console.log(
-          "Verifying certificate token:",
-          token
-        );
-
-        const response =
-          await certificateAPI.verifyCertificate(token);
-
-        console.log(
-          "Certificate verification response:",
-          response.data
-        );
+        console.log("Verification response:", response.data);
 
         if (
           response.data?.verified === true &&
           response.data?.certificate
         ) {
-          setCertificate(
-            response.data.certificate
-          );
-
+          setCertificate(response.data.certificate);
           setValid(true);
         } else {
           setCertificate(null);
@@ -66,8 +49,8 @@ const VerifyCertificate = () => {
         }
       } catch (error) {
         console.error(
-          "Certificate verification error:",
-          error
+          "Certificate verification failed:",
+          error.response?.data || error.message
         );
 
         setCertificate(null);
@@ -78,40 +61,24 @@ const VerifyCertificate = () => {
     };
 
     verifyCertificate();
-  }, []);
-
-  // =====================================================
-  // LOADING
-  // =====================================================
+  }, [qrToken]);
 
   if (loading) {
     return (
-      <LoadingScreen
-        message="Verifying certificate..."
-      />
+      <LoadingScreen message="Verifying certificate..." />
     );
   }
 
-  // =====================================================
-  // PAGE
-  // =====================================================
-
   return (
     <div className="app-page">
-
       <Navbar />
 
       <main className="page-section pt-8">
-
         <div className="page-container max-w-3xl">
-
           <div className="app-card">
 
             {valid && certificate ? (
-
               <>
-                {/* SUCCESS */}
-
                 <div className="text-center">
 
                   <CheckCircle
@@ -130,12 +97,7 @@ const VerifyCertificate = () => {
 
                 </div>
 
-
-                {/* CERTIFICATE INFORMATION */}
-
                 <div className="mt-8 space-y-5">
-
-                  {/* Verification status */}
 
                   <div className="rounded-2xl border border-green-200 bg-green-50 p-5">
 
@@ -162,11 +124,7 @@ const VerifyCertificate = () => {
 
                   </div>
 
-
-                  {/* Certificate ID */}
-
                   <div>
-
                     <p className="text-xs font-bold uppercase text-slate-500">
                       Certificate ID
                     </p>
@@ -174,31 +132,19 @@ const VerifyCertificate = () => {
                     <p className="mt-1 break-all font-mono font-bold text-black">
                       {certificate.certificateId}
                     </p>
-
                   </div>
 
-
-                  {/* Recipient */}
-
                   <div>
-
                     <p className="text-xs font-bold uppercase text-slate-500">
                       Recipient
                     </p>
 
                     <p className="mt-1 text-lg font-black text-black">
-                      {certificate.studentName ||
-                        certificate.recipientName ||
-                        "Student"}
+                      {certificate.studentName || "Student"}
                     </p>
-
                   </div>
 
-
-                  {/* Certificate type */}
-
                   <div>
-
                     <p className="text-xs font-bold uppercase text-slate-500">
                       Certificate Type
                     </p>
@@ -206,14 +152,9 @@ const VerifyCertificate = () => {
                     <p className="mt-1 font-bold text-black">
                       Participation Certificate
                     </p>
-
                   </div>
 
-
-                  {/* Event */}
-
                   <div>
-
                     <p className="text-xs font-bold uppercase text-slate-500">
                       Event
                     </p>
@@ -221,14 +162,9 @@ const VerifyCertificate = () => {
                     <p className="mt-1 text-xl font-black text-black">
                       {certificate.eventName}
                     </p>
-
                   </div>
 
-
-                  {/* Event Date */}
-
                   {certificate.eventDate && (
-
                     <div className="flex items-center gap-3">
 
                       <Calendar
@@ -245,24 +181,17 @@ const VerifyCertificate = () => {
                         <p className="font-semibold">
                           {new Date(
                             certificate.eventDate
-                          ).toLocaleDateString(
-                            "en-IN",
-                            {
-                              day: "numeric",
-                              month: "long",
-                              year: "numeric",
-                            }
-                          )}
+                          ).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          })}
                         </p>
 
                       </div>
 
                     </div>
-
                   )}
-
-
-                  {/* Issued */}
 
                   <div className="flex items-center gap-3">
 
@@ -281,14 +210,11 @@ const VerifyCertificate = () => {
                         {certificate.issuedAt
                           ? new Date(
                               certificate.issuedAt
-                            ).toLocaleDateString(
-                              "en-IN",
-                              {
-                                day: "numeric",
-                                month: "long",
-                                year: "numeric",
-                              }
-                            )
+                            ).toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "long",
+                              year: "numeric",
+                            })
                           : "N/A"}
                       </p>
 
@@ -297,15 +223,8 @@ const VerifyCertificate = () => {
                   </div>
 
                 </div>
-
               </>
-
             ) : (
-
-              /* =================================================
-                 INVALID
-              ================================================= */
-
               <div className="py-8 text-center">
 
                 <XCircle
@@ -325,17 +244,13 @@ const VerifyCertificate = () => {
                 </p>
 
               </div>
-
             )}
 
           </div>
-
         </div>
-
       </main>
 
       <Footer />
-
     </div>
   );
 };

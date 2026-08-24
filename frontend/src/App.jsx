@@ -27,7 +27,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route
-          path="/verify-certificate/:certificateId"
+          path="/verify-certificate/:qrToken"
           element={<VerifyCertificate />}
         />
         {/* Protected Routes */}
