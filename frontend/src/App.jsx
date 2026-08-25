@@ -15,6 +15,7 @@ import Contact from './pages/Contact';
 import Notifications from './pages/Notifications';
 import Calendar from './pages/Calendar';
 import VerifyCertificate from './pages/VerifyCertificate';
+import AIAgent from "./components/AIAgent";
 
 function App() {
   return (
@@ -81,6 +82,7 @@ function App() {
 
         <Route path="*" element={<Navigate to="/profile" replace />} />
       </Routes>
+      <AIAgent />
     </Router>
   );
 }

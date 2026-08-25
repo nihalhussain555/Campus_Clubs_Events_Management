@@ -7,6 +7,7 @@ import clubRoutes from './routes/clubRoutes.js';
 import eventRoutes from './routes/eventRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import certificateRoutes from './routes/certificateRoutes.js';
+import agentRoutes from './routes/agentRoutes.js';
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.use('/api/clubs', clubRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/certificates', certificateRoutes);
+app.use('/api/agent', agentRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

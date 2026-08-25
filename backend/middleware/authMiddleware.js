@@ -5,15 +5,20 @@ const JWT_SECRET =
   process.env.JWT_SECRET || 'your_jwt_secret_key_change_in_production';
 
 const getTokenFromHeader = (req) => {
-  const authHeader = req.headers.authorization || req.headers.Authorization;
+  const authHeader =
+    req.headers.authorization ||
+    req.headers.Authorization;
 
   if (!authHeader) {
     return null;
   }
 
-  const parts = authHeader.split(' ');
+  const parts = authHeader.trim().split(/\s+/);
 
-  if (parts.length !== 2 || parts[0] !== 'Bearer') {
+  if (
+    parts.length !== 2 ||
+    parts[0].toLowerCase() !== 'bearer'
+  ) {
     return null;
   }
 
@@ -36,11 +41,22 @@ export const verifyToken = async (req, res, next) => {
     // Verify JWT
     const decoded = jwt.verify(token, JWT_SECRET);
 
+    // Support both existing JWT formats:
+    // { id: userId }
+    // { userId: userId }
+    const userId = decoded.id || decoded.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: 'Invalid token payload'
+      });
+    }
+
     // IMPORTANT:
-    // Do NOT trust the role stored inside the old JWT.
-    // Get the latest role directly from MongoDB.
-    const user = await User.findById(decoded.id).select(
-      '_id name email role studentId profilePic'
+    // Do NOT trust the role stored inside the JWT.
+    // Always get the latest user information from MongoDB.
+    const user = await User.findById(userId).select(
+      '_id name email role studentId profilePic department course'
     );
 
     if (!user) {
@@ -56,12 +72,17 @@ export const verifyToken = async (req, res, next) => {
       email: user.email,
       role: user.role,
       studentId: user.studentId,
-      profilePic: user.profilePic
+      profilePic: user.profilePic,
+      department: user.department,
+      course: user.course
     };
 
     next();
   } catch (error) {
-    console.error('Authentication error:', error.message);
+    console.error(
+      'Authentication error:',
+      error.message
+    );
 
     return res.status(401).json({
       message: 'Invalid or expired token'
@@ -89,6 +110,11 @@ export const verifyAdmin = async (req, res, next) => {
 
     next();
   } catch (error) {
+    console.error(
+      'Admin verification error:',
+      error.message
+    );
+
     return res.status(403).json({
       message: 'Admin verification failed'
     });
@@ -114,6 +140,11 @@ export const verifyStudent = async (req, res, next) => {
 
     next();
   } catch (error) {
+    console.error(
+      'Student verification error:',
+      error.message
+    );
+
     return res.status(403).json({
       message: 'Student verification failed'
     });

@@ -258,6 +258,7 @@ export const certificateAPI = {
     ),
 };
 
+
 export const notificationAPI = {
 
   // Get logged-in user's notifications
@@ -277,5 +278,11 @@ export const notificationAPI = {
     api.put('/notifications/read-all')
 };
 
+export const agentAPI = {
+  chat: (message) =>
+    api.post("/agent/chat", {
+      message,
+    }),
+};
 
 export default api;
