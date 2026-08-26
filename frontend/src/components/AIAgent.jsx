@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 
 import {
   Bot,
@@ -23,7 +24,6 @@ const AIAgent = () => {
   ]);
 
   const [input, setInput] = useState("");
-
   const [loading, setLoading] = useState(false);
 
   const messagesEndRef = useRef(null);
@@ -212,7 +212,9 @@ const AIAgent = () => {
           </div>
 
 
-          {/* MESSAGES */}
+          {/* =====================================================
+              MESSAGES
+          ===================================================== */}
 
           <div
             className="
@@ -234,6 +236,8 @@ const AIAgent = () => {
                 }`}
               >
 
+                {/* AI ICON */}
+
                 {message.role === "assistant" && (
                   <div
                     className="
@@ -254,6 +258,9 @@ const AIAgent = () => {
                   </div>
                 )}
 
+
+                {/* MESSAGE */}
+
                 <div
                   className={`
                     max-w-[78%]
@@ -269,7 +276,96 @@ const AIAgent = () => {
                     }
                   `}
                 >
-                  {message.content}
+
+                  {message.role === "assistant" ? (
+
+                    /*
+                     * IMPORTANT:
+                     * ReactMarkdown converts:
+                     *
+                     * **Register**
+                     *
+                     * into:
+                     *
+                     * Register
+                     *
+                     * with bold styling.
+                     */
+
+                    <ReactMarkdown
+                      components={{
+                        strong: ({ children }) => (
+                          <strong className="font-extrabold text-slate-900">
+                            {children}
+                          </strong>
+                        ),
+
+                        p: ({ children }) => (
+                          <p className="mb-2 last:mb-0">
+                            {children}
+                          </p>
+                        ),
+
+                        ol: ({ children }) => (
+                          <ol className="ml-5 list-decimal space-y-2">
+                            {children}
+                          </ol>
+                        ),
+
+                        ul: ({ children }) => (
+                          <ul className="ml-5 list-disc space-y-2">
+                            {children}
+                          </ul>
+                        ),
+
+                        li: ({ children }) => (
+                          <li className="pl-1">
+                            {children}
+                          </li>
+                        ),
+
+                        h1: ({ children }) => (
+                          <h1 className="mb-2 text-lg font-black text-slate-900">
+                            {children}
+                          </h1>
+                        ),
+
+                        h2: ({ children }) => (
+                          <h2 className="mb-2 text-base font-black text-slate-900">
+                            {children}
+                          </h2>
+                        ),
+
+                        h3: ({ children }) => (
+                          <h3 className="mb-2 font-black text-slate-900">
+                            {children}
+                          </h3>
+                        ),
+
+                        code: ({ children }) => (
+                          <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-mono text-slate-800">
+                            {children}
+                          </code>
+                        ),
+
+                        blockquote: ({ children }) => (
+                          <blockquote className="my-2 border-l-4 border-[#145f82] pl-3 text-slate-600">
+                            {children}
+                          </blockquote>
+                        ),
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+
+                  ) : (
+
+                    <p className="whitespace-pre-wrap">
+                      {message.content}
+                    </p>
+
+                  )}
+
                 </div>
 
               </div>
@@ -277,7 +373,9 @@ const AIAgent = () => {
             ))}
 
 
-            {/* TYPING */}
+            {/* =====================================================
+                TYPING
+            ===================================================== */}
 
             {loading && (
 
@@ -322,7 +420,9 @@ const AIAgent = () => {
           </div>
 
 
-          {/* INPUT */}
+          {/* =====================================================
+              INPUT
+          ===================================================== */}
 
           <div
             className="
