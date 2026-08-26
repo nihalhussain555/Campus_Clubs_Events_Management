@@ -41,14 +41,18 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const requestUrl = error.config?.url || '';
 
-    // =================================================
-    // LOGIN ERROR
-    // Do NOT redirect when email/password is incorrect
-    // Login.jsx will display the backend error message.
-    // =================================================
-    const isLoginRequest = requestUrl.includes('/auth/login');
+    const isLoginRequest =
+      requestUrl.includes('/auth/login');
 
-    if (status === 401 && !isLoginRequest) {
+    const isAgentRequest =
+      requestUrl.includes('/agent/chat');
+
+    // Only redirect for protected requests
+    if (
+      status === 401 &&
+      !isLoginRequest &&
+      !isAgentRequest
+    ) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
 

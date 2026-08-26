@@ -14,6 +14,6 @@ const router = express.Router();
   the logged-in student's certificate information.
 */
 
-router.post("/chat", verifyToken, chatWithAgent);
+router.post("/chat", chatWithAgent);
 
 export default router;
