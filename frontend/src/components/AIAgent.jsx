@@ -28,16 +28,51 @@ const AIAgent = () => {
 
   const messagesEndRef = useRef(null);
 
+  // =====================================================
+  // AUTO SCROLL
+  // =====================================================
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
       behavior: "smooth",
     });
   }, [messages, loading]);
 
+  // =====================================================
+  // SEND MESSAGE
+  // =====================================================
+
   const sendMessage = async () => {
     const text = input.trim();
 
     if (!text || loading) return;
+
+    // ===================================================
+    // CHECK LOGIN BEFORE SENDING
+    // ===================================================
+
+    const token = localStorage.getItem("token");
+
+    // User is NOT logged in
+    if (!token) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          role: "assistant",
+          content:
+            "🔒 **Please login to use the AI Agent.**",
+        },
+      ]);
+
+      setInput("");
+
+      return;
+    }
+
+    // ===================================================
+    // USER MESSAGE
+    // ===================================================
 
     const userMessage = {
       id: Date.now(),
@@ -53,11 +88,16 @@ const AIAgent = () => {
     setInput("");
     setLoading(true);
 
+    // ===================================================
+    // AI REQUEST
+    // ===================================================
+
     try {
       const response = await agentAPI.chat(text);
 
       const reply =
         response.data?.reply ||
+        response.data?.message ||
         "Sorry, I couldn't understand that.";
 
       setMessages((prev) => [
@@ -76,7 +116,7 @@ const AIAgent = () => {
 
       if (error.response?.status === 401) {
         errorMessage =
-          "Please log in to use Campus Clubs AI.";
+          "🔒 **Please login to use the AI Agent.**";
       }
 
       setMessages((prev) => [
@@ -92,6 +132,10 @@ const AIAgent = () => {
     }
   };
 
+  // =====================================================
+  // ENTER KEY
+  // =====================================================
+
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -99,11 +143,15 @@ const AIAgent = () => {
     }
   };
 
+  // =====================================================
+  // PAGE
+  // =====================================================
+
   return (
     <>
-      {/* =====================================================
+      {/* =================================================
           CHAT WINDOW
-      ===================================================== */}
+      ================================================= */}
 
       {open && (
         <div
@@ -123,7 +171,9 @@ const AIAgent = () => {
           "
         >
 
-          {/* HEADER */}
+          {/* =================================================
+              HEADER
+          ================================================= */}
 
           <div
             className="
@@ -211,10 +261,9 @@ const AIAgent = () => {
 
           </div>
 
-
-          {/* =====================================================
+          {/* =================================================
               MESSAGES
-          ===================================================== */}
+          ================================================= */}
 
           <div
             className="
@@ -258,7 +307,6 @@ const AIAgent = () => {
                   </div>
                 )}
 
-
                 {/* MESSAGE */}
 
                 <div
@@ -272,25 +320,12 @@ const AIAgent = () => {
                     ${
                       message.role === "user"
                         ? "rounded-br-md bg-[#145f82] text-white"
-                        : "rounded-bl-md bg-white text-slate-700 shadow-sm border border-slate-100"
+                        : "rounded-bl-md border border-slate-100 bg-white text-slate-700 shadow-sm"
                     }
                   `}
                 >
 
                   {message.role === "assistant" ? (
-
-                    /*
-                     * IMPORTANT:
-                     * ReactMarkdown converts:
-                     *
-                     * **Register**
-                     *
-                     * into:
-                     *
-                     * Register
-                     *
-                     * with bold styling.
-                     */
 
                     <ReactMarkdown
                       components={{
@@ -372,10 +407,9 @@ const AIAgent = () => {
 
             ))}
 
-
-            {/* =====================================================
+            {/* =================================================
                 TYPING
-            ===================================================== */}
+            ================================================= */}
 
             {loading && (
 
@@ -419,10 +453,9 @@ const AIAgent = () => {
 
           </div>
 
-
-          {/* =====================================================
+          {/* =================================================
               INPUT
-          ===================================================== */}
+          ================================================= */}
 
           <div
             className="
@@ -501,10 +534,9 @@ const AIAgent = () => {
         </div>
       )}
 
-
-      {/* =====================================================
+      {/* =================================================
           FLOATING BUTTON
-      ===================================================== */}
+      ================================================= */}
 
       {!open && (
         <button
