@@ -110,7 +110,7 @@ const AIAgent = () => {
           className="
             fixed
             bottom-24
-            left-5
+            right-5
             z-[9999]
             w-[350px]
             max-w-[calc(100vw-40px)]
@@ -513,7 +513,7 @@ const AIAgent = () => {
           className="
             fixed
             bottom-5
-            left-5
+            right-5
             z-[9999]
             flex
             h-14
