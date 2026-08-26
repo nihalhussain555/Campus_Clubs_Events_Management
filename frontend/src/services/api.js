@@ -38,7 +38,17 @@ api.interceptors.response.use(
   (response) => response,
 
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    const requestUrl = error.config?.url || '';
+
+    // =================================================
+    // LOGIN ERROR
+    // Do NOT redirect when email/password is incorrect
+    // Login.jsx will display the backend error message.
+    // =================================================
+    const isLoginRequest = requestUrl.includes('/auth/login');
+
+    if (status === 401 && !isLoginRequest) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
 
@@ -50,7 +60,6 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
 
 // =====================================================
 // HELPERS
