@@ -24,7 +24,7 @@ export const CORS_ORIGINS = (
   process.env.CLIENT_URL ||
   process.env.FRONTEND_URL ||
   process.env.CORS_ORIGINS ||
-  ''
+  'http://localhost:3000'
 )
   .split(',')
   .map((origin) => origin.trim())

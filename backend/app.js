@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { CORS_ORIGINS } from './config/env';
+import { CORS_ORIGINS } from './config/env.js';
 import { authLimiter, agentLimiter } from './middleware/rateLimiters.js';
 import authRoutes from './routes/authRoutes.js';
 import clubRoutes from './routes/clubRoutes.js';
