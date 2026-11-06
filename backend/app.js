@@ -24,7 +24,7 @@ app.use(
   })
 );
 
-const allowlist = new Set(CORS_ORIGINS);
+const allowlist = new Set(FRONTEND_URL);
 
 app.use(
   cors({
