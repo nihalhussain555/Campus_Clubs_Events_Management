@@ -7,15 +7,22 @@ import {
   Users,
   Search,
   CheckCircle,
-  Clock
+  Clock,
+  QrCode
 } from 'lucide-react';
 
 import Navbar from '../components/Navbar';
 import LoadingScreen from '../components/LoadingScreen';
 import Toast from '../components/Toast';
 import RegisterEventModal from '../components/RegisterEventModal';
+import CheckInTicketModal from '../components/CheckInTicketModal';
+import ConfirmDialog from '../components/ConfirmDialog';
+import EmptyState from '../components/EmptyState';
+import Pagination from '../components/Pagination';
+import EventCheckInDesk from '../components/EventCheckInDesk';
 
 import { clubAPI, eventAPI } from '../services/api';
+import { statusLabel as getEventStatus } from '../utils/eventStatus';
 
 
 const Events = () => {
@@ -42,6 +49,17 @@ const Events = () => {
 
   const [actionLoadingIds, setActionLoadingIds] =
     useState([]);
+
+  // Event the student is showing a check-in QR for
+  const [checkinTicketEvent, setCheckinTicketEvent] =
+    useState(null);
+
+  // Destructive action waiting for confirmation
+  const [pendingAction, setPendingAction] =
+    useState(null);
+
+  const [currentPage, setCurrentPage] =
+    useState(1);
 
   const [showForm, setShowForm] =
     useState(false);
@@ -128,42 +146,6 @@ const Events = () => {
 
 
   // =====================================================
-  // EVENT STATUS
-  // =====================================================
-
-  const getEventStatus = (event) => {
-
-    if (
-      event.status?.toLowerCase() ===
-      'cancelled'
-    ) {
-      return 'Cancelled';
-    }
-
-    const now = new Date();
-
-    const start =
-      new Date(event.date);
-
-    const end =
-      new Date(event.endDate);
-
-    if (now < start) {
-      return 'Upcoming';
-    }
-
-    if (
-      now >= start &&
-      now <= end
-    ) {
-      return 'Ongoing';
-    }
-
-    return 'Finished';
-  };
-
-
-  // =====================================================
   // USER REGISTRATION
   // =====================================================
 
@@ -218,6 +200,54 @@ const Events = () => {
         String(userId)
       );
     });
+  };
+
+
+  // =====================================================
+  // CAN THE CURRENT USER RUN CHECK-IN FOR THIS EVENT
+  // Mirrors the backend's requireEventManager rule:
+  // platform admins, or the admin of the owning club.
+  // =====================================================
+
+  const currentUserId =
+    user?.id || user?._id;
+
+  const clubAdminId = (club) =>
+    club?.admin?._id || club?.admin;
+
+  const isClubManager = (club) =>
+    Boolean(currentUserId) &&
+    Boolean(clubAdminId(club)) &&
+    String(clubAdminId(club)) === String(currentUserId);
+
+  // Clubs this account runs. Club leaders can only create and manage
+  // events that belong to one of them.
+  const managedClubs =
+    clubs.filter(isClubManager);
+
+  const canCreateEvents =
+    user?.role === 'admin' ||
+    managedClubs.length > 0;
+
+  const selectableClubs =
+    user?.role === 'admin'
+      ? clubs
+      : managedClubs;
+
+  const canManageEvent = (event) => {
+
+    if (!user) return false;
+
+    if (user?.role === 'admin') {
+      return true;
+    }
+
+    const clubId =
+      event?.club?._id || event?.club;
+
+    return isClubManager(
+      clubs.find((club) => club._id === clubId)
+    );
   };
 
 
@@ -292,14 +322,6 @@ const Events = () => {
   const handleUnregisterEvent =
     async (eventId) => {
 
-      if (
-        !window.confirm(
-          'Are you sure you want to unregister from this event?'
-        )
-      ) {
-        return;
-      }
-
       try {
 
         setActionLoadingIds((ids) => [
@@ -340,56 +362,12 @@ const Events = () => {
 
 
   // =====================================================
-  // ATTEND EVENT
+  // CHECK-IN
   // =====================================================
 
-  const handleAttendEvent =
-    async (eventId) => {
-
-      if (
-        actionLoadingIds.includes(eventId)
-      ) {
-        return;
-      }
-
-      try {
-
-        setActionLoadingIds((ids) => [
-          ...ids,
-          eventId
-        ]);
-
-        const response =
-          await eventAPI.attendEvent(
-            eventId
-          );
-
-        setToast({
-          message:
-            response.data?.message ||
-            'Attendance marked successfully. Certificate generated.',
-          type: 'success'
-        });
-
-        await fetchEvents();
-
-      } catch (error) {
-
-        setToast({
-          message:
-            error.response?.data?.message ||
-            'Unable to mark attendance',
-          type: 'error'
-        });
-
-      } finally {
-
-        setActionLoadingIds((ids) =>
-          ids.filter(
-            (id) => id !== eventId
-          )
-        );
-      }
+  const handleOpenCheckinTicket =
+    async (event) => {
+      setCheckinTicketEvent(event);
     };
 
 
@@ -477,14 +455,6 @@ const Events = () => {
   const handleDeleteEvent =
     async (eventId) => {
 
-      if (
-        !window.confirm(
-          'Are you sure you want to delete this event?'
-        )
-      ) {
-        return;
-      }
-
       try {
 
         await eventAPI.deleteEvent(
@@ -508,6 +478,30 @@ const Events = () => {
           type: 'error'
         });
       }
+    };
+
+
+  const requestUnregisterEvent =
+    (event) => {
+      setPendingAction({
+        title: `Unregister from ${event.title}?`,
+        message:
+          'You will lose your place and any check-in code issued for this event.',
+        confirmLabel: 'Unregister',
+        run: () => handleUnregisterEvent(event._id)
+      });
+    };
+
+
+  const requestDeleteEvent =
+    (event) => {
+      setPendingAction({
+        title: `Delete ${event.title}?`,
+        message:
+          'This removes the event, its registrations and the certificates already issued for it. This cannot be undone.',
+        confirmLabel: 'Delete event',
+        run: () => handleDeleteEvent(event._id)
+      });
     };
 
 
@@ -669,6 +663,35 @@ const Events = () => {
     ]);
 
 
+  const EVENTS_PER_PAGE = 9;
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(
+      filteredEvents.length / EVENTS_PER_PAGE
+    )
+  );
+
+  const safePage =
+    Math.min(currentPage, totalPages);
+
+  const paginatedEvents =
+    filteredEvents.slice(
+      (safePage - 1) * EVENTS_PER_PAGE,
+      safePage * EVENTS_PER_PAGE
+    );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    search,
+    statusFilter,
+    categoryFilter,
+    clubFilter,
+    sortBy
+  ]);
+
+
   // =====================================================
   // CATEGORIES
   // =====================================================
@@ -738,7 +761,7 @@ const Events = () => {
 
             </div>
 
-            {user?.role === 'admin' && (
+            {canCreateEvents && (
               <button
                 type="button"
                 onClick={() =>
@@ -762,7 +785,7 @@ const Events = () => {
           {/* CREATE EVENT */}
 
           {showForm &&
-            user?.role === 'admin' && (
+            canCreateEvents && (
 
               <form
                 onSubmit={
@@ -828,7 +851,7 @@ const Events = () => {
                         Select a club
                       </option>
 
-                      {clubs.map(
+                      {selectableClubs.map(
                         (club) => (
 
                           <option
@@ -1100,8 +1123,8 @@ const Events = () => {
                   Ongoing
                 </option>
 
-                <option value="finished">
-                  Finished
+                <option value="completed">
+                  Completed
                 </option>
 
                 <option value="cancelled">
@@ -1243,9 +1266,11 @@ const Events = () => {
 
           {filteredEvents.length > 0 ? (
 
+            <>
+
             <div className="grid gap-5 lg:grid-cols-2">
 
-              {filteredEvents.map(
+              {paginatedEvents.map(
                 (event) => {
 
                   const status =
@@ -1305,7 +1330,7 @@ const Events = () => {
                         <span
                           className={`chip ${
                             status ===
-                            'Finished'
+                            'Completed'
                               ? 'bg-red-100 text-red-700 border border-red-200'
                               : status ===
                                 'Ongoing'
@@ -1441,8 +1466,8 @@ const Events = () => {
                             <button
                               type="button"
                               onClick={() =>
-                                handleUnregisterEvent(
-                                  event._id
+                                requestUnregisterEvent(
+                                  event
                                 )
                               }
                               disabled={
@@ -1456,7 +1481,7 @@ const Events = () => {
                           )}
 
 
-                        {/* ATTEND */}
+                        {/* CHECK-IN CODE */}
 
                         {registered &&
                           status ===
@@ -1466,8 +1491,8 @@ const Events = () => {
                             <button
                               type="button"
                               onClick={() =>
-                                handleAttendEvent(
-                                  event._id
+                                handleOpenCheckinTicket(
+                                  event
                                 )
                               }
                               disabled={
@@ -1476,13 +1501,11 @@ const Events = () => {
                               className="btn-primary flex-1 flex items-center justify-center gap-2"
                             >
 
-                              <CheckCircle
+                              <QrCode
                                 size={18}
                               />
 
-                              {loadingAction
-                                ? 'Marking...'
-                                : 'Attend'}
+                              Check in
 
                             </button>
 
@@ -1519,7 +1542,7 @@ const Events = () => {
                                 size={14}
                               />
 
-                              Attend button
+                              Check-in code
                               appears when
                               event starts
 
@@ -1528,16 +1551,17 @@ const Events = () => {
                           )}
 
 
-                        {/* ADMIN DELETE */}
+                        {/* EVENT DELETE - ORGANISER */}
 
-                        {user?.role ===
-                          'admin' && (
+                        {canManageEvent(
+                          event
+                        ) && (
 
                           <button
                             type="button"
                             onClick={() =>
-                              handleDeleteEvent(
-                                event._id
+                              requestDeleteEvent(
+                                event
                               )
                             }
                             className="btn-secondary px-3"
@@ -1552,6 +1576,23 @@ const Events = () => {
 
                       </div>
 
+
+                      {/* ORGANISER CHECK-IN DESK */}
+
+                      {canManageEvent(
+                        event
+                      ) &&
+                        status ===
+                          'Ongoing' && (
+
+                          <EventCheckInDesk
+                            event={event}
+                            onNotify={setToast}
+                            onVerified={fetchEvents}
+                          />
+
+                        )}
+
                     </article>
 
                   );
@@ -1561,15 +1602,34 @@ const Events = () => {
 
             </div>
 
+            <Pagination
+              page={safePage}
+              totalPages={totalPages}
+              onChange={(nextPage) => {
+                setCurrentPage(nextPage);
+                window.scrollTo({
+                  top: 0,
+                  behavior: 'smooth'
+                });
+              }}
+            />
+
+            </>
+
           ) : (
 
-            <div className="app-card text-center">
-
-              <p className="text-lg font-bold text-slate-500">
-                No events match your filters.
-              </p>
-
-            </div>
+            <EmptyState
+              icon={Calendar}
+              title="No events match your filters"
+              message="Try a different search term, category or club to see more campus events."
+              actionLabel="Clear filters"
+              onAction={() => {
+                setSearch('');
+                setStatusFilter('all');
+                setCategoryFilter('all');
+                setClubFilter('all');
+              }}
+            />
 
           )}
 
@@ -1602,6 +1662,24 @@ const Events = () => {
         loading={
           registeringEvent
         }
+      />
+
+      <CheckInTicketModal
+        event={checkinTicketEvent}
+        onClose={() => setCheckinTicketEvent(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingAction)}
+        title={pendingAction?.title}
+        message={pendingAction?.message}
+        confirmLabel={pendingAction?.confirmLabel}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => {
+          const action = pendingAction;
+          setPendingAction(null);
+          action?.run();
+        }}
       />
 
     </div>

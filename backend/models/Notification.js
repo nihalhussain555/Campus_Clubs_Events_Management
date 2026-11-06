@@ -44,7 +44,17 @@ const notificationSchema = new mongoose.Schema(
     isRead: {
       type: Boolean,
       default: false
-    }
+    },
+
+    // Broadcast rows (user: null) are a single shared document, so a lone
+    // isRead flag would let the first reader mark it read for the whole
+    // campus. Per-recipient read state lives here instead.
+    readBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      }
+    ]
   },
   {
     timestamps: true

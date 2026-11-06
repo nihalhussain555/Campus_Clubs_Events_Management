@@ -5,6 +5,8 @@ import { clubAPI } from '../services/api';
 import LoadingScreen from '../components/LoadingScreen';
 import Toast from '../components/Toast';
 import JoinClubModal from '../components/JoinClubModal';
+import ConfirmDialog from '../components/ConfirmDialog';
+import EmptyState from '../components/EmptyState';
 
 const Clubs = () => {
   const [clubs, setClubs] = useState([]);
@@ -17,6 +19,7 @@ const Clubs = () => {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joiningClub, setJoiningClub] = useState(false);
   const [leavingClubId, setLeavingClubId] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   const fetchClubs = async () => {
@@ -64,7 +67,6 @@ const Clubs = () => {
 
   const handleLeaveClub = async (clubId) => {
     if (leavingClubId === clubId) return;
-    if (!window.confirm('Are you sure you want to leave this club?')) return;
 
     setLeavingClubId(clubId);
     try {
@@ -72,10 +74,22 @@ const Clubs = () => {
       setToast({ message: 'Successfully left club', type: 'success' });
       await fetchClubs();
     } catch (error) {
-      setToast({ message: 'Error leaving club', type: 'error' });
+      setToast({
+        message: error.response?.data?.message || 'Error leaving club',
+        type: 'error'
+      });
     } finally {
       setLeavingClubId(null);
     }
+  };
+
+  const requestLeaveClub = (club) => {
+    setPendingAction({
+      title: 'Leave this club?',
+      message: `You will stop receiving updates from ${club.clubName} and can rejoin later.`,
+      confirmLabel: 'Leave club',
+      run: () => handleLeaveClub(club._id)
+    });
   };
 
   const handleCreateClub = async (e) => {
@@ -97,14 +111,26 @@ const Clubs = () => {
   };
 
   const handleDeleteClub = async (clubId) => {
-    if (!window.confirm('Are you sure you want to delete this club?')) return;
     try {
       await clubAPI.deleteClub(clubId);
       setToast({ message: 'Club deleted successfully', type: 'success' });
       fetchClubs();
     } catch (error) {
-      setToast({ message: 'Error deleting club', type: 'error' });
+      setToast({
+        message: error.response?.data?.message || 'Error deleting club',
+        type: 'error'
+      });
     }
+  };
+
+  const requestDeleteClub = (club) => {
+    setPendingAction({
+      title: `Delete ${club.clubName}?`,
+      message:
+        'This removes the club and its membership list. Clubs that still have events cannot be deleted until those events are removed.',
+      confirmLabel: 'Delete club',
+      run: () => handleDeleteClub(club._id)
+    });
   };
 
   if (loading) return <LoadingScreen message="Loading clubs..." />;
@@ -178,7 +204,7 @@ const Clubs = () => {
                         joined ? (
                           <button
                             type="button"
-                            onClick={() => handleLeaveClub(club._id)}
+                            onClick={() => requestLeaveClub(club)}
                             className="btn-danger flex-1 whitespace-nowrap text-xs sm:text-sm px-2"
                             disabled={leavingClubId === club._id}
                           >
@@ -199,7 +225,7 @@ const Clubs = () => {
                         )
                       )}
                       {user?.role === 'admin' && (
-                        <button type="button" onClick={() => handleDeleteClub(club._id)} className="btn-secondary px-3" aria-label={`Delete ${club.clubName}`}>
+                        <button type="button" onClick={() => requestDeleteClub(club)} className="btn-secondary px-3" aria-label={`Delete ${club.clubName}`}>
                           <Trash2 size={18} />
                         </button>
                       )}
@@ -209,9 +235,11 @@ const Clubs = () => {
               })}
             </div>
           ) : (
-            <div className="app-card text-center">
-              <p className="text-lg font-bold text-slate-500">No clubs available yet.</p>
-            </div>
+            <EmptyState
+              icon={Users}
+              title="No clubs yet"
+              message="Clubs created by the college or by club leaders will appear here."
+            />
           )}
         </div>
       </main>
@@ -225,6 +253,19 @@ const Clubs = () => {
         }}
         onConfirm={handleConfirmJoin}
         loading={joiningClub}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingAction)}
+        title={pendingAction?.title}
+        message={pendingAction?.message}
+        confirmLabel={pendingAction?.confirmLabel}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => {
+          const action = pendingAction;
+          setPendingAction(null);
+          action?.run();
+        }}
       />
     </div>
   );

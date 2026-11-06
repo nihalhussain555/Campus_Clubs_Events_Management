@@ -12,11 +12,22 @@ import {
   X,
   Settings,
   FileText,
+  Sun,
+  Moon,
   GraduationCap
 } from 'lucide-react';
 
 import api, { authAPI, notificationAPI } from '../services/api';
+import { useTheme } from '../hooks/useTheme';
 
+
+// Read receipts belong to one account. A shared key would let the first
+// person on a browser mark everyone else's notifications as read.
+const readIdsKey = () => {
+  const current = JSON.parse(localStorage.getItem('user') || '{}');
+
+  return `readNotificationIds:${current?.id || current?._id || 'anonymous'}`;
+};
 
 const Navbar = () => {
 
@@ -34,7 +45,7 @@ const Navbar = () => {
   const [readNotificationIds, setReadNotificationIds] = useState(() => {
     try {
       return JSON.parse(
-        localStorage.getItem('readNotificationIds') || '[]'
+        localStorage.getItem(readIdsKey()) || '[]'
       );
     } catch {
       return [];
@@ -46,6 +57,8 @@ const Navbar = () => {
   const [user, setUser] = useState(
     JSON.parse(localStorage.getItem('user') || '{}')
   );
+
+  const { theme, toggleTheme } = useTheme();
 
 
   // =====================================================
@@ -188,7 +201,7 @@ const Navbar = () => {
   useEffect(() => {
 
     localStorage.setItem(
-      'readNotificationIds',
+      readIdsKey(),
       JSON.stringify(readNotificationIds)
     );
 
@@ -222,6 +235,7 @@ const Navbar = () => {
 
       return (
         id &&
+        !notification.isRead &&
         !readNotificationIds.includes(id)
       );
 
@@ -237,15 +251,22 @@ const Navbar = () => {
   // MARK SINGLE NOTIFICATION AS READ
   // =====================================================
 
-  const markNotificationAsRead = (notification) => {
+  const markNotificationAsRead = async (notification) => {
 
     const id =
       getNotificationId(notification);
 
-    if (!id) {
+    if (!id || notification?.isRead) {
       return;
     }
 
+    // The server keeps the authoritative per-recipient read state; the local
+    // list only makes the badge feel instant between polls.
+    try {
+      await notificationAPI.markAsRead(id);
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
 
     setReadNotificationIds((previous) => {
 
@@ -267,7 +288,7 @@ const Navbar = () => {
   // MARK ALL NOTIFICATIONS AS READ
   // =====================================================
 
-  const markAllNotificationsAsRead = () => {
+  const markAllNotificationsAsRead = async () => {
 
     const ids = notifications
       .map((notification) =>
@@ -275,6 +296,11 @@ const Navbar = () => {
       )
       .filter(Boolean);
 
+    try {
+      await notificationAPI.markAllAsRead();
+    } catch (error) {
+      console.error('Failed to mark notifications as read:', error);
+    }
 
     setReadNotificationIds((previous) => {
 
@@ -348,6 +374,11 @@ const Navbar = () => {
             ? [
                 { to: '/admin', label: 'Admin'}
               ]
+            : []),
+          ...(user?.role === 'club_leader'
+            ? [
+                { to: '/leader', label: 'Dashboard' }
+              ]
             : [])
         ]
       : [])
@@ -418,6 +449,27 @@ const Navbar = () => {
           ))}
 
         </nav>
+
+
+        {/* =================================================
+            THEME TOGGLE
+        ================================================= */}
+
+        <button
+          type="button"
+
+          onClick={toggleTheme}
+
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition-all duration-200 hover:bg-slate-50 hover:text-black dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
+
+          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        >
+
+          {theme === 'dark'
+            ? <Sun size={19} strokeWidth={2} />
+            : <Moon size={19} strokeWidth={2} />}
+
+        </button>
 
 
         {/* =================================================
@@ -772,6 +824,29 @@ const Navbar = () => {
                     </div>
 
                   )}
+
+                </div>
+
+
+                {/* VIEW ALL */}
+
+                <div className="border-t border-slate-100 p-2">
+
+                  <button
+                    type="button"
+                    onClick={() => {
+
+                      setNotificationOpen(false);
+
+                      navigate('/notifications');
+
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#145f82] hover:bg-[#e8f5fb]"
+                  >
+
+                    View all notifications
+
+                  </button>
 
                 </div>
 

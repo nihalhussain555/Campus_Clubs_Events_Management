@@ -41,10 +41,12 @@ router.post(
   createCertificate
 );
 
-/* Get certificate */
+/* Get certificate - the caller must own it, or be an admin. The public
+   verification path is /verify/:qrToken below. */
 
 router.get(
   "/:certificateId",
+  verifyToken,
   getCertificateById
 );
 

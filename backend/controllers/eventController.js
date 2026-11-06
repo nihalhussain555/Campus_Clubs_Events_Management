@@ -1,9 +1,20 @@
+import mongoose from 'mongoose';
 import Event from '../models/Event.js';
 import Certificate from '../models/Certificate.js';
+import Attendance from '../models/Attendance.js';
+import User from '../models/User.js';
+import Club from '../models/Club.js';
 
 import {
   issueCertificate
 } from './certificateController.js';
+
+import {
+  signCheckinToken,
+  verifyCheckinToken
+} from '../utils/checkinToken.js';
+
+import { canManageEvent, canManageClub } from '../middleware/permissions.js';
 
 
 // =====================================================
@@ -85,6 +96,23 @@ export const createEvent = async (req, res) => {
       });
     }
 
+    const clubExists = await Club.exists({ _id: club });
+
+    if (!clubExists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Club not found'
+      });
+    }
+
+    // Club leaders create events only for clubs they run; admins create for any.
+    if (!(await canManageClub(req.user, club))) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You do not run this club.'
+      });
+    }
+
     const event = await Event.create({
       title: title.trim(),
       description: description.trim(),
@@ -139,29 +167,18 @@ export const getAllEvents = async (req, res) => {
       .populate('certificateRecipients', 'name email')
       .sort({ date: 1 });
 
-    const updatedEvents = events.map((event) => {
-      const status = getCurrentStatus(event);
-
-      if (
-        event.status !== 'cancelled' &&
-        event.status !== status
-      ) {
-        Event.findByIdAndUpdate(
-          event._id,
-          { status }
-        ).catch(() => {});
-      }
-
-      return {
-        ...event.toObject(),
-        status
-      };
-    });
+    // Status is derived from the event's own timestamps, so it is reported
+    // rather than written back. Persisting it per list request produced N
+    // unawaited writes whose failures were silently swallowed.
+    const result = events.map((event) => ({
+      ...event.toObject(),
+      status: getCurrentStatus(event)
+    }));
 
     return res.status(200).json({
       success: true,
-      count: updatedEvents.length,
-      events: updatedEvents
+      count: result.length,
+      events: result
     });
 
   } catch (error) {
@@ -346,6 +363,17 @@ export const updateEvent = async (req, res) => {
       });
     }
 
+    // Reassigning an event to a different club needs permission on the
+    // destination club, not just the current one.
+    if (club && String(club) !== String(event.club)) {
+      if (!(await canManageClub(req.user, club))) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. You do not run the target club.'
+        });
+      }
+    }
+
     event.title = title ?? event.title;
     event.description = description ?? event.description;
     event.date = startDate;
@@ -452,6 +480,10 @@ export const registerForEvent = async (req, res) => {
       });
     }
 
+    // Read the event to give a precise reason, then register atomically: a
+    // single-document update whose filter carries both the duplicate and the
+    // capacity check, so two concurrent students cannot both take the last
+    // place the way a read-then-push could.
     const event = await Event.findById(req.params.id);
 
     if (!event) {
@@ -471,11 +503,9 @@ export const registerForEvent = async (req, res) => {
       });
     }
 
-    const alreadyRegistered =
-      event.registeredStudents.some(
-        (id) =>
-          id.toString() === userId.toString()
-      );
+    const alreadyRegistered = event.registeredStudents.some(
+      (id) => id.toString() === userId.toString()
+    );
 
     if (alreadyRegistered) {
       return res.status(409).json({
@@ -484,23 +514,35 @@ export const registerForEvent = async (req, res) => {
       });
     }
 
-    if (
-      event.registeredStudents.length >= event.capacity
-    ) {
+    const oid = new mongoose.Types.ObjectId(userId);
+
+    const updated = await Event.updateOne(
+      {
+        _id: event._id,
+        status: { $ne: 'cancelled' },
+        date: { $gt: new Date() },
+        registeredStudents: { $ne: oid },
+        $expr: {
+          $lt: [
+            { $size: { $ifNull: ['$registeredStudents', []] } },
+            { $ifNull: ['$capacity', 0] }
+          ]
+        }
+      },
+      { $addToSet: { registeredStudents: oid } }
+    );
+
+    if (updated.matchedCount === 0) {
       return res.status(400).json({
         success: false,
         message: 'Event registration is full'
       });
     }
 
-    event.registeredStudents.push(userId);
-
-    await event.save();
-
     return res.status(200).json({
       success: true,
       message: 'Successfully registered for event',
-      event
+      event: await Event.findById(event._id).populate('club', 'clubName')
     });
 
   } catch (error) {
@@ -589,19 +631,148 @@ export const unregisterFromEvent = async (req, res) => {
 
 
 // =====================================================
-// ATTEND EVENT
-// POST /api/events/:id/attend
-// REGISTERED STUDENTS
+// RECORD ATTENDANCE
+// shared by QR check-in and the admin roster
 // =====================================================
 
-export const attendEvent = async (req, res) => {
+// The Attendance row is written first because its unique (event, user) index is
+// what actually stops double attendance; Event.participants is then mirrored so
+// every existing read of that array keeps returning correct data.
+const recordAttendance = async ({ event, userId, method, verifiedBy }) => {
+  const oid = new mongoose.Types.ObjectId(userId);
+
+  try {
+    await Attendance.create({
+      event: event._id,
+      user: oid,
+      method,
+      verifiedBy: verifiedBy || null
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      const duplicate = new Error(
+        'Attendance has already been recorded for this student'
+      );
+      duplicate.statusCode = 409;
+      throw duplicate;
+    }
+    throw error;
+  }
+
+  const alreadyListed = event.participants.some(
+    (id) => id.toString() === String(userId)
+  );
+
+  if (!alreadyListed) {
+    event.participants.push(oid);
+    await event.save();
+  }
+
+  let certificate = null;
+
+  if (event.certificateEnabled) {
+    certificate = await issueCertificate(userId, event._id);
+  }
+
+  return certificate;
+};
+
+const reloadEvent = (id) =>
+  Event.findById(id)
+    .populate('club', 'clubName category')
+    .populate('registeredStudents', 'name email')
+    .populate('participants', 'name email')
+    .populate('certificateRecipients', 'name email');
+
+// =====================================================
+// STUDENT CHECK-IN QR
+// GET /api/events/:id/checkin-token
+// =====================================================
+
+export const getMyCheckinToken = async (req, res) => {
   try {
     const userId = getUserId(req);
 
-    if (!userId) {
-      return res.status(401).json({
+    const event = await Event.findById(req.params.id).select(
+      'registeredStudents'
+    );
+
+    if (!event) {
+      return res.status(404).json({
         success: false,
-        message: 'User authentication required'
+        message: 'Event not found'
+      });
+    }
+
+    const registered = event.registeredStudents.some(
+      (id) => id.toString() === String(userId)
+    );
+
+    if (!registered) {
+      return res.status(403).json({
+        success: false,
+        message: 'You must register for this event to get a check-in QR'
+      });
+    }
+
+    const attended = await Attendance.exists({
+      event: event._id,
+      user: userId
+    });
+
+    if (attended) {
+      return res.status(409).json({
+        success: false,
+        message: 'Attendance is already recorded for this event'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      token: signCheckinToken(event._id, userId)
+    });
+  } catch (error) {
+    console.error('Check-in token error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate check-in QR'
+    });
+  }
+};
+
+// =====================================================
+// QR CHECK-IN
+// POST /api/events/:id/checkin
+// The organiser scans the student's registration QR.
+// =====================================================
+
+export const checkInEvent = async (req, res) => {
+  try {
+    const { token } = req.body || {};
+
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'A scanned check-in token is required'
+      });
+    }
+
+    const allowed = await canManageEvent(req.user, req.params.id);
+
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You do not run this event.'
+      });
+    }
+
+    const verified = verifyCheckinToken(token, req.params.id);
+
+    if (!verified.valid) {
+      return res.status(400).json({
+        success: false,
+        message: verified.reason
       });
     }
 
@@ -614,111 +785,51 @@ export const attendEvent = async (req, res) => {
       });
     }
 
-    const isRegistered =
-      event.registeredStudents.some(
-        (student) =>
-          student.toString() === userId.toString()
-      );
+    const student = await User.findById(verified.userId).select('name email');
 
-    if (!isRegistered) {
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student account not found'
+      });
+    }
+
+    // The token proves who the student is, not that they belong to this event,
+    // so the roster is checked here as well.
+    const onRoster = event.registeredStudents.some(
+      (id) => id.toString() === student._id.toString()
+    );
+
+    if (!onRoster) {
       return res.status(400).json({
         success: false,
-        message:
-          'You must register for this event before attending'
+        message: 'This student is not registered for the event'
       });
     }
 
-    const startTime = new Date(event.date);
-    const endTime = new Date(event.endDate);
-    const now = new Date();
-
-    if (now < startTime) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Attendance is available only when the event starts'
-      });
-    }
-
-    if (now > endTime) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Attendance is closed because the event has ended'
-      });
-    }
-
-    const alreadyAttended =
-      event.participants.some(
-        (student) =>
-          student.toString() === userId.toString()
-      );
-
-    if (alreadyAttended) {
-      return res.status(409).json({
-        success: false,
-        message:
-          'You have already marked attendance'
-      });
-    }
-
-    event.participants.push(userId);
-    event.status = 'ongoing';
-
-    await event.save();
-
-    // Generate certificate only when enabled
-    let certificate = null;
-
-    if (event.certificateEnabled) {
-      certificate = await issueCertificate(
-        userId,
-        event._id
-      );
-    }
-
-    const updatedEvent =
-      await Event.findById(event._id)
-        .populate(
-          'club',
-          'clubName category'
-        )
-        .populate(
-          'registeredStudents',
-          'name email'
-        )
-        .populate(
-          'participants',
-          'name email'
-        )
-        .populate(
-          'certificateRecipients',
-          'name email'
-        );
+    const certificate = await recordAttendance({
+      event,
+      userId: student._id,
+      method: 'qr_scan',
+      verifiedBy: req.user.id
+    });
 
     return res.status(200).json({
       success: true,
-      message:
-        'Attendance marked successfully',
-      event: updatedEvent,
-      certificate
+      message: `${student.name} checked in successfully`,
+      student: { id: student._id, name: student.name, email: student.email },
+      certificate,
+      event: await reloadEvent(event._id)
     });
-
   } catch (error) {
-    console.error(
-      'Attend event error:',
-      error
-    );
+    console.error('QR check-in error:', error);
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
-      message:
-        error.message ||
-        'Unable to mark attendance'
+      message: error.message || 'Check-in failed'
     });
   }
 };
-
 
 // =====================================================
 // ADMIN MARK ATTENDANCE
@@ -760,72 +871,26 @@ export const markAttendance = async (req, res) => {
       });
     }
 
-    const alreadyAttended =
-      event.participants.some(
-        (id) =>
-          id.toString() === userId.toString()
-      );
-
-    if (alreadyAttended) {
-      return res.status(409).json({
-        success: false,
-        message:
-          'Student has already been marked as attended'
-      });
-    }
-
-    event.participants.push(userId);
-
-    if (getCurrentStatus(event) !== 'cancelled') {
-      event.status = 'ongoing';
-    }
-
-    await event.save();
-
-    let certificate = null;
-
-    if (event.certificateEnabled) {
-      certificate = await issueCertificate(
-        userId,
-        event._id
-      );
-    }
-
-    const updatedEvent =
-      await Event.findById(event._id)
-        .populate('club', 'clubName')
-        .populate(
-          'registeredStudents',
-          'name email'
-        )
-        .populate(
-          'participants',
-          'name email'
-        )
-        .populate(
-          'certificateRecipients',
-          'name email'
-        );
+    const certificate = await recordAttendance({
+      event,
+      userId,
+      method: 'roster',
+      verifiedBy: req.user.id
+    });
 
     return res.status(200).json({
       success: true,
-      message:
-        'Attendance marked successfully',
-      event: updatedEvent,
+      message: 'Attendance marked successfully',
+      event: await reloadEvent(event._id),
       certificate
     });
 
   } catch (error) {
-    console.error(
-      'Admin mark attendance error:',
-      error
-    );
+    console.error('Admin mark attendance error:', error);
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
-      message:
-        error.message ||
-        'Failed to mark attendance'
+      message: error.message || 'Failed to mark attendance'
     });
   }
 };
@@ -877,7 +942,18 @@ export const removeAttendance = async (req, res) => {
           id.toString() !== userId.toString()
       );
 
+    event.certificateRecipients =
+      event.certificateRecipients.filter(
+        (id) =>
+          id.toString() !== userId.toString()
+      );
+
     await event.save();
+
+    await Attendance.deleteOne({
+      event: event._id,
+      user: userId
+    });
 
     // Remove certificate generated for this attendance
     await Certificate.deleteMany({

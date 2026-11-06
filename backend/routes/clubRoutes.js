@@ -6,9 +6,11 @@ import {
   updateClub,
   deleteClub,
   joinClub,
-  leaveClub
+  leaveClub,
+  transferClubAdmin
 } from '../controllers/clubController.js';
 import { verifyToken, verifyAdmin } from '../middleware/authMiddleware.js';
+import { requireClubManager } from '../middleware/permissions.js';
 
 const router = express.Router();
 
@@ -16,14 +18,23 @@ const router = express.Router();
 router.get('/', getAllClubs);
 router.get('/:id', getClubById);
 
-// Protected routes
+// Creating a club stays admin-controlled; leadership within an existing club is
+// handed over through the transfer route below.
 router.post('/', verifyToken, verifyAdmin, createClub);
-router.put('/:id', verifyToken, verifyAdmin, updateClub);
-router.delete('/:id', verifyToken, verifyAdmin, deleteClub);
+
+// The club's own leader may edit it, not just platform admins.
+router.put('/:id', verifyToken, requireClubManager(), updateClub);
+router.delete('/:id', verifyToken, requireClubManager(), deleteClub);
+
+router.put(
+  '/:id/transfer-admin',
+  verifyToken,
+  requireClubManager(),
+  transferClubAdmin
+);
 
 // Student routes
 router.post('/:id/join', verifyToken, joinClub);
 router.post('/:id/leave', verifyToken, leaveClub);
-router.delete('/:id/leave', verifyToken, leaveClub);
 
 export default router;

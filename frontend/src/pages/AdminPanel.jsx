@@ -26,6 +26,9 @@ import {
 } from '../services/api';
 import LoadingScreen from '../components/LoadingScreen';
 import Toast from '../components/Toast';
+import ConfirmDialog from '../components/ConfirmDialog';
+import AnalyticsCharts from '../components/AnalyticsCharts';
+import { getEventStatus } from '../utils/eventStatus';
 
 const AdminPanel = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -44,6 +47,9 @@ const AdminPanel = () => {
   const [showClubForm, setShowClubForm] = useState(false);
   const [showEventForm, setShowEventForm] = useState(false);
 
+  // Destructive action waiting for confirmation
+  const [pendingAction, setPendingAction] = useState(null);
+
   const [newClub, setNewClub] = useState({
     clubName: '',
     description: '',
@@ -53,6 +59,7 @@ const AdminPanel = () => {
     title: '',
     description: '',
     date: '',
+    endDate: '',
     location: '',
     club: '',
     capacity: 100,
@@ -126,30 +133,6 @@ const AdminPanel = () => {
       hour: '2-digit',
       minute: '2-digit',
     });
-  };
-
-  const getEventStatus = (event) => {
-    if (!event) return 'upcoming';
-
-    const eventDate = new Date(event.date);
-    const now = new Date();
-
-    if (event.status?.toLowerCase() === 'cancelled') {
-      return 'cancelled';
-    }
-
-    if (
-      event.status?.toLowerCase() === 'completed' ||
-      eventDate < now
-    ) {
-      return 'completed';
-    }
-
-    if (event.status?.toLowerCase() === 'ongoing') {
-      return 'ongoing';
-    }
-
-    return 'upcoming';
   };
 
   const getStatusClasses = (status) => {
@@ -246,12 +229,6 @@ const AdminPanel = () => {
   // --------------------------------------------------
 
   const handleDeleteClub = async (clubId) => {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete this club? This action cannot be undone.'
-    );
-
-    if (!confirmed) return;
-
     try {
       await clubAPI.deleteClub(clubId);
 
@@ -271,17 +248,21 @@ const AdminPanel = () => {
     }
   };
 
+  const requestDeleteClub = (club) => {
+    setPendingAction({
+      title: `Delete ${club.clubName}?`,
+      message:
+        'This removes the club and its membership list. Clubs with events must have those events deleted first.',
+      confirmLabel: 'Delete club',
+      run: () => handleDeleteClub(club._id)
+    });
+  };
+
   // --------------------------------------------------
   // DELETE EVENT
   // --------------------------------------------------
 
   const handleDeleteEvent = async (eventId) => {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete this event? This action cannot be undone.'
-    );
-
-    if (!confirmed) return;
-
     try {
       await eventAPI.deleteEvent(eventId);
 
@@ -299,6 +280,16 @@ const AdminPanel = () => {
         type: 'error',
       });
     }
+  };
+
+  const requestDeleteEvent = (event) => {
+    setPendingAction({
+      title: `Delete ${event.title}?`,
+      message:
+        'This removes the event, its registrations and the certificates issued for it. This cannot be undone.',
+      confirmLabel: 'Delete event',
+      run: () => handleDeleteEvent(event._id)
+    });
   };
 
   // --------------------------------------------------
@@ -353,11 +344,20 @@ const AdminPanel = () => {
       !newEvent.title.trim() ||
       !newEvent.description.trim() ||
       !newEvent.date ||
+      !newEvent.endDate ||
       !newEvent.club
     ) {
       setToast({
         message:
           'Please fill in all required event fields',
+        type: 'error',
+      });
+      return;
+    }
+
+    if (new Date(newEvent.endDate) <= new Date(newEvent.date)) {
+      setToast({
+        message: 'The end time must be after the start time',
         type: 'error',
       });
       return;
@@ -375,6 +375,7 @@ const AdminPanel = () => {
         title: '',
         description: '',
         date: '',
+        endDate: '',
         location: '',
         club: '',
         capacity: 100,
@@ -758,6 +759,12 @@ const AdminPanel = () => {
                 </div>
 
               </div>
+
+              <AnalyticsCharts
+                users={users}
+                clubs={clubs}
+                events={events}
+              />
 
               {/* Recent Users + Recent Events */}
 
@@ -1251,7 +1258,7 @@ const AdminPanel = () => {
                       <button
                         type="button"
                         onClick={() =>
-                          handleDeleteClub(club._id)
+                          requestDeleteClub(club)
                         }
                         className="btn-danger mt-6 w-full"
                       >
@@ -1417,11 +1424,11 @@ const AdminPanel = () => {
                     />
                   </div>
 
-                  <div className="mt-5 grid gap-5 md:grid-cols-4">
+                  <div className="mt-5 grid gap-5 md:grid-cols-3">
 
                     <div>
                       <label className="field-label">
-                        Date & time *
+                        Start date &amp; time *
                       </label>
 
                       <input
@@ -1432,6 +1439,26 @@ const AdminPanel = () => {
                           setNewEvent({
                             ...newEvent,
                             date: e.target.value,
+                          })
+                        }
+                        className="field"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="field-label">
+                        End date &amp; time *
+                      </label>
+
+                      <input
+                        type="datetime-local"
+                        required
+                        value={newEvent.endDate}
+                        min={newEvent.date}
+                        onChange={(e) =>
+                          setNewEvent({
+                            ...newEvent,
+                            endDate: e.target.value,
                           })
                         }
                         className="field"
@@ -1633,8 +1660,8 @@ const AdminPanel = () => {
                               <button
                                 type="button"
                                 onClick={() =>
-                                  handleDeleteEvent(
-                                    event._id
+                                  requestDeleteEvent(
+                                    event
                                   )
                                 }
                                 className="btn-danger px-3"
@@ -1871,6 +1898,19 @@ const AdminPanel = () => {
 
         </div>
       </main>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingAction)}
+        title={pendingAction?.title}
+        message={pendingAction?.message}
+        confirmLabel={pendingAction?.confirmLabel}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => {
+          const action = pendingAction;
+          setPendingAction(null);
+          action?.run();
+        }}
+      />
     </div>
   );
 };

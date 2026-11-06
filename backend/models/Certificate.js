@@ -78,4 +78,8 @@ const certificateSchema = new mongoose.Schema(
   }
 );
 
+// One certificate per student per event. The app-level findOne guard in
+// issueCertificate is a race, so the database enforces it too.
+certificateSchema.index({ user: 1, event: 1 }, { unique: true });
+
 export default mongoose.model('Certificate', certificateSchema);

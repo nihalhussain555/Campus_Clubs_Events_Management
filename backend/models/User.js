@@ -11,8 +11,10 @@ const userSchema = new mongoose.Schema({
     required: [true, 'Please provide an email'],
     unique: true,
     lowercase: true,
+    // The previous pattern required a 2-3 character TLD, which rejected valid
+    // addresses on longer TLDs (.education, .company, .technology).
     match: [
-      /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
       'Please provide a valid email'
     ]
   },
@@ -69,6 +71,13 @@ const userSchema = new mongoose.Schema({
     }
   }
 ],
+
+  // Read by AccountSettings. Defaults live in the schema so the toggles
+  // round-trip instead of being stripped by strict mode.
+  pushNotifications: { type: Boolean, default: true },
+  eventReminders: { type: Boolean, default: true },
+  membershipAlerts: { type: Boolean, default: true },
+
   createdAt: {
     type: Date,
     default: Date.now

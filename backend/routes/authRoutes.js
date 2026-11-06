@@ -14,6 +14,8 @@ import {
   verifyAdmin
 } from '../middleware/authMiddleware.js';
 
+import { loginLimiter } from '../middleware/rateLimiters.js';
+
 const router = express.Router();
 
 
@@ -30,6 +32,7 @@ router.post(
 // Login
 router.post(
   '/login',
+  loginLimiter,
   login
 );
 

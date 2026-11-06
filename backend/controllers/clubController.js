@@ -1,5 +1,6 @@
 import Club from '../models/Club.js';
 import User from '../models/User.js';
+import Event from '../models/Event.js';
 
 // =====================================================
 // CREATE CLUB - ADMIN ONLY
@@ -109,7 +110,7 @@ export const updateClub = async (req, res) => {
 
     if (
       club.admin.toString() !== req.user.id &&
-      req.user.role !== 'admin'
+      req.user.effectiveRole !== 'admin'
     ) {
       return res.status(403).json({
         message: 'Not authorized to update this club'
@@ -163,10 +164,21 @@ export const deleteClub = async (req, res) => {
 
     if (
       club.admin.toString() !== req.user.id &&
-      req.user.role !== 'admin'
+      req.user.effectiveRole !== 'admin'
     ) {
       return res.status(403).json({
         message: 'Not authorized to delete this club'
+      });
+    }
+
+    // Deleting the club would leave its events pointing at a missing club, so
+    // the events are cleared deliberately rather than orphaned.
+    const eventCount = await Event.countDocuments({ club: club._id });
+
+    if (eventCount > 0) {
+      return res.status(409).json({
+        message:
+          `This club still has ${eventCount} event(s). Delete or reassign those events first.`
       });
     }
 
@@ -195,6 +207,69 @@ export const deleteClub = async (req, res) => {
       message: 'Server error',
       error: error.message
     });
+  }
+};
+
+// =====================================================
+// TRANSFER CLUB LEADERSHIP
+// =====================================================
+export const transferClubAdmin = async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'userId is required' });
+    }
+
+    const club = await Club.findById(req.params.id);
+
+    if (!club) {
+      return res.status(404).json({ message: 'Club not found' });
+    }
+
+    const isCurrentAdmin = club.admin.toString() === req.user.id;
+    const isAdmin = req.user.effectiveRole === 'admin';
+
+    if (!isCurrentAdmin && !isAdmin) {
+      return res.status(403).json({
+        message: 'Not authorized to transfer this club'
+      });
+    }
+
+    const isMember = club.members.some(
+      (member) => member.toString() === userId.toString()
+    );
+
+    if (!isMember) {
+      return res.status(400).json({
+        message: 'The new club leader must already be a member'
+      });
+    }
+
+    club.admin = userId;
+
+    await club.save();
+
+    // Promote the incoming leader, but never demote an existing admin.
+    const newLeader = await User.findById(userId);
+
+    if (newLeader && newLeader.role !== 'admin') {
+      newLeader.role = 'club_leader';
+      await newLeader.save();
+    }
+
+    const updatedClub = await Club.findById(club._id)
+      .populate('admin', 'name email')
+      .populate('members', 'name email');
+
+    res.status(200).json({
+      message: 'Club leadership transferred',
+      club: updatedClub
+    });
+  } catch (error) {
+    console.error('Transfer club admin error:', error);
+
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
@@ -263,6 +338,15 @@ export const leaveClub = async (req, res) => {
     if (!club) {
       return res.status(404).json({
         message: 'Club not found'
+      });
+    }
+
+    // Letting the running leader walk away would leave the club with no one who
+    // can manage it, so they must hand over the club admin first.
+    if (club.admin.toString() === req.user.id) {
+      return res.status(400).json({
+        message:
+          'Club leaders cannot leave their own club. Transfer the club to another member first.'
       });
     }
 

@@ -1,8 +1,10 @@
 import axios from 'axios';
 
+// A compiled-in localhost URL would silently break a deployed build that
+// forgets VITE_API_BASE_URL, so the dev default only applies to `npm run dev`.
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
-  'http://localhost:5000/api';
+  (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -164,7 +166,10 @@ export const clubAPI = {
   leaveClub: (id) =>
     api
       .post(`/clubs/${id}/leave`)
-      .then(extractData)
+      .then(extractData),
+
+  transferLeadership: (id, userId) =>
+    api.put(`/clubs/${id}/transfer-admin`, { userId })
 };
 
 
@@ -218,13 +223,19 @@ export const eventAPI = {
       .then(extractData),
 
   // =================================================
-  // STUDENT ATTENDANCE
+  // CHECK-IN
   // =================================================
 
-  attendEvent: (id) =>
+  // The student's own QR payload, shown for an organiser to scan.
+  getCheckinToken: (id) =>
+    api.get(`/events/${id}/checkin-token`),
+
+  // Organiser-side: submit a QR scanned from a student's device.
+  checkIn: (id, token) =>
     api
-      .post(`/events/${id}/attend`)
-      .then(extractData),
+      .post(`/events/${id}/checkin`, { token })
+      .then(extractData)
+      .catch(handleDuplicateActionError),
 
   // =================================================
   // EVENT HISTORY
@@ -288,7 +299,11 @@ export const notificationAPI = {
 
   // Mark all notifications as read
   markAllAsRead: () =>
-    api.put('/notifications/read-all')
+    api.put('/notifications/read-all'),
+
+  // Delete one notification
+  deleteNotification: (id) =>
+    api.delete(`/notifications/${id}`)
 };
 
 export const agentAPI = {

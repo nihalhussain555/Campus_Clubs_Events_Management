@@ -1,13 +1,8 @@
 import User from '../models/User.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { JWT_SECRET, JWT_EXPIRES_IN } from '../config/env.js';
 
-const JWT_SECRET =
-  process.env.JWT_SECRET || 'your_jwt_secret_key_change_in_production';
-
-// =====================================================
-// GENERATE JWT
-// =====================================================
 const generateToken = (id, role) => {
   return jwt.sign(
     {
@@ -16,7 +11,7 @@ const generateToken = (id, role) => {
     },
     JWT_SECRET,
     {
-      expiresIn: '7d'
+      expiresIn: JWT_EXPIRES_IN
     }
   );
 };
@@ -42,9 +37,22 @@ export const signup = async (req, res) => {
       dob
     } = req.body;
 
-    if (!name || !email || !password) {
+    if (
+      typeof name !== 'string' ||
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !name.trim() ||
+      !email.trim() ||
+      !password
+    ) {
       return res.status(400).json({
         message: 'Please provide all required fields'
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        message: 'Password must be at least 6 characters'
       });
     }
 
@@ -120,6 +128,20 @@ export const signup = async (req, res) => {
   } catch (error) {
     console.error('Signup error:', error);
 
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        message: Object.values(error.errors)
+          .map((field) => field.message)
+          .join(', ')
+      });
+    }
+
+    if (error.code === 11000) {
+      return res.status(400).json({
+        message: 'Email already registered'
+      });
+    }
+
     res.status(500).json({
       message: 'Server error',
       error: error.message
@@ -134,7 +156,14 @@ export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    // Objects survive a falsy check, so the types are verified here rather
+    // than letting a stripped operator payload reach toLowerCase().
+    if (
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !email.trim() ||
+      !password
+    ) {
       return res.status(400).json({
         message: 'Please provide email and password'
       });
@@ -264,18 +293,72 @@ export const getUserProfile = async (req, res) => {
 // =====================================================
 // UPDATE USER PROFILE
 // =====================================================
+
+// Self-service profile fields only. Anything relationship- or privilege-bearing
+// (role, email, joinedClubs, registeredEvents, certificates) is server-managed,
+// because a student could otherwise write themselves into any club by posting
+// the field directly instead of calling joinClub.
+const EDITABLE_PROFILE_FIELDS = [
+  'name',
+  'studentId',
+  'personalEmail',
+  'department',
+  'year',
+  'semester',
+  'course',
+  'section',
+  'bio',
+  'gender',
+  'dob',
+  'phone',
+  'address',
+  'profilePic',
+  'pushNotifications',
+  'eventReminders',
+  'membershipAlerts'
+];
+
 export const updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const updates = {
-      ...req.body
-    };
+    const updates = {};
 
-    // NEVER allow normal profile update to change these
-    delete updates.password;
-    delete updates.role;
-    delete updates.email;
+    for (const field of EDITABLE_PROFILE_FIELDS) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (updates.name !== undefined && !String(updates.name).trim()) {
+      return res.status(400).json({ message: 'Name cannot be empty' });
+    }
+
+    if (updates.profilePic !== undefined && updates.profilePic !== '') {
+      const pic = String(updates.profilePic);
+      const isInlineImage = /^data:image\/(png|jpe?g|webp);base64,/i.test(pic);
+      const isRemoteImage = /^https?:\/\/\S+$/i.test(pic);
+
+      if (!isInlineImage && !isRemoteImage) {
+        return res.status(400).json({
+          message: 'Profile picture must be a PNG, JPG or WEBP image'
+        });
+      }
+
+      // Inline images live on the user document, so they are capped well below
+      // the request body limit instead of letting a client fill the database.
+      if (isInlineImage && pic.length > 1_000_000) {
+        return res.status(413).json({
+          message: 'Profile picture is too large. Please choose a smaller image.'
+        });
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        message: 'No editable profile fields were provided'
+      });
+    }
 
     const user = await User.findByIdAndUpdate(
       userId,

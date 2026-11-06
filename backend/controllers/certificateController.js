@@ -4,6 +4,11 @@ import PDFDocument from "pdfkit";
 import Certificate from "../models/Certificate.js";
 import Event from "../models/Event.js";
 import User from "../models/User.js";
+import { CORS_ORIGINS } from "../config/env.js";
+
+// Printed on certificates and returned with the API payload, so it comes from
+// the same configured origins CORS uses rather than a compiled-in localhost.
+const PUBLIC_FRONTEND_ORIGIN = CORS_ORIGINS[0] || null;
 
 /* =========================================================
    ISSUE CERTIFICATE
@@ -187,17 +192,15 @@ export const getMyCertificates = async (
           issuedAt: -1,
         });
 
-    const frontendUrl =
-      process.env.FRONTEND_URL ||
-      "http://localhost:5173";
+    const frontendUrl = PUBLIC_FRONTEND_ORIGIN;
 
     const result = certificates.map(
       (certificate) => ({
         ...certificate.toObject(),
 
-        verificationUrl:
-          `${frontendUrl}/verify-certificate/` +
-          certificate.qrToken,
+        verificationUrl: frontendUrl
+          ? `${frontendUrl}/verify-certificate/${certificate.qrToken}`
+          : null,
       })
     );
 
@@ -246,6 +249,16 @@ export const getCertificateById = async (
       });
     }
 
+    const ownerId = certificate.user?._id?.toString();
+    const isAdmin = req.user?.effectiveRole === "admin";
+
+    if (ownerId !== req.user?.id && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied for this certificate",
+      });
+    }
+
     return res.json({
       success: true,
       certificate,
@@ -264,18 +277,13 @@ export const getCertificateById = async (
 };
 
 
-/// =====================================================
+// =====================================================
 // VERIFY CERTIFICATE - PUBLIC
 // =====================================================
 
 export const verifyCertificate = async (req, res) => {
   try {
     const { qrToken } = req.params;
-
-    console.log("=================================");
-    console.log("CERTIFICATE VERIFICATION REQUEST");
-    console.log("QR Token:", qrToken);
-    console.log("=================================");
 
     // Validate token
     if (!qrToken || !qrToken.trim()) {
@@ -293,8 +301,6 @@ export const verifyCertificate = async (req, res) => {
 
     // Certificate not found
     if (!certificate) {
-      console.log("Certificate NOT FOUND");
-
       return res.status(404).json({
         verified: false,
         certificate: null,
@@ -302,12 +308,8 @@ export const verifyCertificate = async (req, res) => {
       });
     }
 
-    console.log("Certificate FOUND:", certificate.certificateId);
-
     // Check certificate validity
     if (certificate.verified !== true) {
-      console.log("Certificate is marked invalid");
-
       return res.status(200).json({
         verified: false,
         certificate: null,
@@ -595,13 +597,11 @@ export const downloadCertificatePDF = async (
 
     /* Verification */
 
-    const frontendUrl =
-      process.env.FRONTEND_URL ||
-      "http://localhost:5173";
+    const frontendUrl = PUBLIC_FRONTEND_ORIGIN;
 
-    const verificationUrl =
-      `${frontendUrl}/verify-certificate/` +
-      certificate.qrToken;
+    const verificationUrl = frontendUrl
+      ? `${frontendUrl}/verify-certificate/${certificate.qrToken}`
+      : `Verify with reference ${certificate.certificateId}`;
 
     doc
       .fontSize(9)
@@ -620,7 +620,7 @@ export const downloadCertificatePDF = async (
       .fontSize(9)
       .fillColor("#777777")
       .text(
-        "Scan the QR code or open the verification URL to verify this certificate.",
+        "Open the verification link above to confirm this certificate.",
         80,
         545,
         {

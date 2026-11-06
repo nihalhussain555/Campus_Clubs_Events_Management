@@ -3,6 +3,11 @@ import { authAPI } from '../services/api';
 import Toast from '../components/Toast';
 import Navbar from "../components/Navbar";
 import LoadingScreen from '../components/LoadingScreen';
+import {
+  downscaleImage,
+  isSupportedImage,
+  MAX_UPLOAD_BYTES
+} from '../utils/imageUpload';
 
 import {
   ArrowLeft,
@@ -14,7 +19,7 @@ import {
   User,
   ShieldCheck,
   Bell,
-  CreditCard,Camera,Mail,Phone,MapPin,CalendarDays,GraduationCap,Building2,Hash,CheckCircle2,Smartphone,BellRing,Megaphone,RotateCcw
+  Camera,Mail,Phone,MapPin,CalendarDays,GraduationCap,Building2,Hash,CheckCircle2,Smartphone,BellRing,Megaphone,RotateCcw
 } from 'lucide-react';
 
 const AccountSettings = () => {
@@ -158,6 +163,44 @@ const AccountSettings = () => {
     }));
   };
 
+  const handleProfilePic = async (file) => {
+    if (!file) return;
+
+    if (!isSupportedImage(file)) {
+      setToast({
+        message: 'Please choose a PNG, JPG or WEBP image',
+        type: 'error'
+      });
+
+      return;
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setToast({
+        message: 'That image is over 8 MB. Please choose a smaller one.',
+        type: 'error'
+      });
+
+      return;
+    }
+
+    try {
+      const dataUrl = await downscaleImage(file, 512);
+
+      updateUser('profilePic', dataUrl);
+
+      setToast({
+        message: 'Image ready. Press Save to apply it.',
+        type: 'success'
+      });
+    } catch (error) {
+      setToast({
+        message: error.message || 'Could not read that image',
+        type: 'error'
+      });
+    }
+  };
+
   if (loading) {
     return (
       <LoadingScreen message="Loading account settings..." />
@@ -280,21 +323,8 @@ const AccountSettings = () => {
                     accept="image/*"
                     className="hidden"
                     onChange={e => {
-                      const file =
-                        e.target.files[0];
-
-                      if (file) {
-                        const reader =
-                          new FileReader();
-
-                        reader.onloadend = () =>
-                          updateUser(
-                            'profilePic',
-                            reader.result
-                          );
-
-                        reader.readAsDataURL(file);
-                      }
+                      handleProfilePic(e.target.files[0]);
+                      e.target.value = '';
                     }}
                   />
                 </label>
@@ -929,14 +959,14 @@ const AccountSettings = () => {
         </section>
 
         {/* =====================================================
-            MEMBERSHIP & BILLING
+            MEMBERSHIP ACTIVITY
         ===================================================== */}
         <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
 
           <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/70">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-                <CreditCard
+                <CheckCircle2
                   size={20}
                   className="text-emerald-600"
                 />
@@ -944,11 +974,11 @@ const AccountSettings = () => {
 
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
-                  Membership & Billing
+                  Membership activity
                 </h2>
 
                 <p className="text-sm text-slate-500">
-                  View your membership status and billing information
+                  A summary of your clubs, events and certificates
                 </p>
               </div>
             </div>
@@ -956,78 +986,64 @@ const AccountSettings = () => {
 
           <div className="p-6">
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
 
-              {/* Membership Status */}
               <div className="rounded-xl border border-slate-200 p-5 bg-slate-50/50">
-
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-slate-600">
-                    Membership Status
+                <div className="flex items-center gap-2 mb-2 text-slate-500">
+                  <Building2 size={17} />
+                  <span className="text-sm font-medium">
+                    Clubs joined
                   </span>
-
-                  <CheckCircle2
-                    size={19}
-                    className="text-emerald-500"
-                  />
                 </div>
-
-                <div className="flex items-center gap-2">
-
-                  <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-sm font-semibold">
-                    {user.membershipStatus ||
-                      'Active'}
-                  </span>
-
-                </div>
+                <p className="text-2xl font-semibold text-slate-900">
+                  {user.joinedClubs?.length || 0}
+                </p>
               </div>
 
-              {/* Payment */}
               <div className="rounded-xl border border-slate-200 p-5 bg-slate-50/50">
-
-                <div className="flex items-center gap-3 mb-3">
-                  <CreditCard
-                    size={18}
-                    className="text-slate-500"
-                  />
-
-                  <span className="text-sm font-medium text-slate-600">
-                    Payment Method
+                <div className="flex items-center gap-2 mb-2 text-slate-500">
+                  <CalendarDays size={17} />
+                  <span className="text-sm font-medium">
+                    Events registered
                   </span>
                 </div>
+                <p className="text-2xl font-semibold text-slate-900">
+                  {user.registeredEvents?.length || 0}
+                </p>
+              </div>
 
+              <div className="rounded-xl border border-slate-200 p-5 bg-slate-50/50">
+                <div className="flex items-center gap-2 mb-2 text-slate-500">
+                  <CheckCircle2 size={17} />
+                  <span className="text-sm font-medium">
+                    Certificates
+                  </span>
+                </div>
+                <p className="text-2xl font-semibold text-slate-900">
+                  {user.certificates?.length || 0}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-5 bg-slate-50/50">
+                <div className="flex items-center gap-2 mb-2 text-slate-500">
+                  <GraduationCap size={17} />
+                  <span className="text-sm font-medium">
+                    Member since
+                  </span>
+                </div>
                 <p className="text-base font-semibold text-slate-900">
-                  {user.paymentMethod ||
-                    'Not Added'}
+                  {user.createdAt
+                    ? new Date(
+                        user.createdAt
+                      ).toLocaleDateString('en-GB', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      })
+                    : '—'}
                 </p>
               </div>
-            </div>
 
-            {/* Billing History */}
-            <div className="mt-5 rounded-xl border border-slate-200 overflow-hidden">
-
-              <div className="px-5 py-4 bg-slate-50 border-b border-slate-200">
-                <h3 className="text-sm font-semibold text-slate-800">
-                  Billing History
-                </h3>
-              </div>
-
-              <div className="p-6 text-center">
-
-                <CreditCard
-                  size={30}
-                  className="mx-auto text-slate-300 mb-3"
-                />
-
-                <p className="text-sm font-medium text-slate-700">
-                  No billing history
-                </p>
-
-                <p className="text-xs text-slate-400 mt-1">
-                  Your payment transactions will appear here.
-                </p>
-
-              </div>
             </div>
           </div>
         </section>

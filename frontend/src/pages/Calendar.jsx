@@ -12,6 +12,7 @@ import Navbar from '../components/Navbar';
 import LoadingScreen from '../components/LoadingScreen';
 import Toast from '../components/Toast';
 import { eventAPI } from '../services/api';
+import { statusLabel as getEventStatus } from '../utils/eventStatus';
 
 const Calendar = () => {
   const [events, setEvents] = useState([]);
@@ -179,28 +180,6 @@ useEffect(() => {
   // EVENT STATUS
   // =====================================================
 
-  const getEventStatus = (event) => {
-    const now = new Date();
-    const eventDate = new Date(event.date);
-
-    if (event.status === 'cancelled') {
-      return 'Cancelled';
-    }
-
-    if (event.status === 'ongoing') {
-      return 'Ongoing';
-    }
-
-    if (event.status === 'completed') {
-      return 'Completed';
-    }
-
-    if (eventDate < now) {
-      return 'Completed';
-    }
-
-    return 'Upcoming';
-  };
 
   if (loading) {
     return <LoadingScreen message="Loading calendar..." />;

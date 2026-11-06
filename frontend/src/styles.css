@@ -11,6 +11,33 @@
   --blue: #2d7a9b;
   --blue-strong: #145f82;
   --blue-soft: #e8f5fb;
+  --page-bg:
+    radial-gradient(circle at 8% 8%, rgba(45, 122, 155, 0.18), transparent 26rem),
+    radial-gradient(circle at 92% 4%, rgba(20, 95, 130, 0.13), transparent 24rem),
+    linear-gradient(180deg, #f3fbff 0%, #f8fcff 46%, #eaf5fb 100%);
+  --track: #edf3f7;
+  --thumb: #b9c8d3;
+  color-scheme: light;
+}
+
+/* Dark theme is driven from an .dark class on <html> so it can be toggled and
+   remembered without a reload. See hooks/useTheme.js. */
+.dark {
+  --ink: #e8eef6;
+  --muted: #9aa8bb;
+  --line: #24313f;
+  --soft: #131e29;
+  --panel: #0e1720;
+  --blue: #4fa8cc;
+  --blue-strong: #8ed0ea;
+  --blue-soft: #14283a;
+  --page-bg:
+    radial-gradient(circle at 8% 8%, rgba(79, 168, 204, 0.14), transparent 26rem),
+    radial-gradient(circle at 92% 4%, rgba(20, 95, 130, 0.18), transparent 24rem),
+    linear-gradient(180deg, #0a121a 0%, #0d1621 46%, #0a121a 100%);
+  --track: #121c26;
+  --thumb: #33465a;
+  color-scheme: dark;
 }
 
 * {
@@ -26,14 +53,13 @@ body {
   min-width: 320px;
   min-height: 100vh;
   color: var(--ink);
-  background:
-    radial-gradient(circle at 8% 8%, rgba(45, 122, 155, 0.18), transparent 26rem),
-    radial-gradient(circle at 92% 4%, rgba(20, 95, 130, 0.13), transparent 24rem),
-    linear-gradient(180deg, #f3fbff 0%, #f8fcff 46%, #eaf5fb 100%);
+  background: var(--page-bg);
+  background-attachment: fixed;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 button,
@@ -63,12 +89,12 @@ button:disabled {
 }
 
 ::-webkit-scrollbar-track {
-  background: #edf3f7;
+  background: var(--track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #b9c8d3;
-  border: 2px solid #edf3f7;
+  background: var(--thumb);
+  border: 2px solid var(--track);
   border-radius: 999px;
 }
 
@@ -229,4 +255,231 @@ button:disabled {
   .hero-shell {
     border-radius: 1.5rem;
   }
+}
+
+/* =====================================================================
+   DARK THEME
+
+   The app was written before tokens existed, so it carries a large number
+   of literal colour classes (58 bg-white, 68 text-black, 54 border-slate-200,
+   plus the hex values baked into the component layer above). Rather than
+   editing every page, the dark palette re-declares those exact utilities and
+   components under .dark. Selectors here are more specific than the Tailwind
+   utilities they replace, so no !important is required.
+   ===================================================================== */
+
+.dark .app-card,
+.dark .metric-card,
+.dark .table-shell,
+.dark .dropdown-card,
+.dark .modal-card,
+.dark .auth-card,
+.dark .hero-shell {
+  background-color: var(--panel);
+  border-color: var(--line);
+  color: var(--ink);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.dark .soft-panel,
+.dark .blue-panel,
+.dark .filter-pill {
+  background-color: var(--soft);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.dark .field {
+  background-color: var(--soft);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.dark .field::placeholder {
+  color: var(--muted);
+}
+
+.dark .field:disabled {
+  background-color: var(--panel);
+  color: var(--muted);
+}
+
+.dark .field-label,
+.dark .table-cell {
+  color: var(--ink);
+}
+
+.dark .table-head {
+  background-color: var(--soft);
+  color: var(--muted);
+}
+
+.dark .eyebrow,
+.dark .icon-tile,
+.dark .chip {
+  background-color: var(--blue-soft);
+  border-color: var(--line);
+  color: var(--blue-strong);
+}
+
+.dark .display-title,
+.dark .section-title {
+  color: var(--ink);
+}
+
+.dark .section-copy {
+  color: var(--muted);
+}
+
+.dark .btn-secondary {
+  background-color: var(--panel);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.dark .btn-soft {
+  background-color: var(--blue-soft);
+  color: var(--blue-strong);
+}
+
+.dark .auth-shell {
+  background: var(--page-bg);
+}
+
+.dark .heat-cell {
+  background-color: var(--blue-soft);
+  border-color: var(--line);
+}
+
+/* Literal surface utilities */
+.dark .bg-white {
+  background-color: var(--panel);
+}
+
+.dark .bg-slate-50,
+.dark .bg-slate-100,
+.dark .bg-slate-200,
+.dark .bg-gray-50,
+.dark .bg-gray-100,
+.dark .bg-gray-200,
+.dark .bg-indigo-50,
+.dark .bg-\[\#e8f5fb\],
+.dark .bg-\[\#eef8fc\],
+.dark .bg-\[\#f6f9fb\],
+.dark .bg-\[\#f5f8fb\],
+.dark .bg-\[\#d7edf7\] {
+  background-color: var(--soft);
+}
+
+/* Translucent glass surfaces keep their alpha but flip to dark */
+.dark .bg-white\/5 {
+  background-color: rgba(232, 238, 246, 0.05);
+}
+
+.dark .bg-white\/10 {
+  background-color: rgba(232, 238, 246, 0.1);
+}
+
+.dark .bg-white\/70,
+.dark .bg-white\/78,
+.dark .bg-white\/90,
+.dark .bg-white\/92 {
+  background-color: rgba(14, 23, 32, 0.82);
+}
+
+.dark .bg-slate-50\/50,
+.dark .bg-slate-50\/60,
+.dark .bg-slate-50\/70,
+.dark .bg-gray-50\/50,
+.dark .bg-indigo-50\/30 {
+  background-color: var(--soft);
+}
+
+/* Literal text utilities. text-white is deliberately left alone: it always sits
+   on a coloured or dark background, where white stays correct. */
+.dark .text-black,
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700,
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-700,
+.dark .text-\[\#073c57\] {
+  color: var(--ink);
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400,
+.dark .text-slate-300,
+.dark .text-gray-600,
+.dark .text-gray-500,
+.dark .text-gray-400 {
+  color: var(--muted);
+}
+
+.dark .text-\[\#145f82\],
+.dark .text-\[\#145f82\]\/70,
+.dark .text-\[\#2d7a9b\] {
+  color: var(--blue-strong);
+}
+
+.dark .text-indigo-600 {
+  color: #a5b4fc;
+}
+
+.dark .text-indigo-500 {
+  color: #c7d2fe;
+}
+
+.dark .text-red-700,
+.dark .text-red-600 {
+  color: #fca5a5;
+}
+
+.dark .text-green-700,
+.dark .text-green-600 {
+  color: #86efac;
+}
+
+.dark .text-amber-700,
+.dark .text-amber-600 {
+  color: #fcd34d;
+}
+
+/* Literal border utilities */
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-200\/80,
+.dark .border-slate-300,
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-gray-300,
+.dark .border-white,
+.dark .border-white\/70,
+.dark .border-white\/80,
+.dark .border-\[\#d7e7ef\],
+.dark .border-\[\#bcddeb\] {
+  border-color: var(--line);
+}
+
+.dark .border-red-200 {
+  border-color: rgba(180, 35, 24, 0.4);
+}
+
+.dark .bg-red-50 {
+  background-color: rgba(180, 35, 24, 0.16);
+}
+
+.dark .bg-green-100 {
+  background-color: rgba(21, 127, 91, 0.22);
+}
+
+.dark .divide-slate-100 > * + *,
+.dark .divide-slate-200 > * + * {
+  border-color: var(--line);
+}
+
+.dark .ring-slate-200 {
+  --tw-ring-color: var(--line);
 }

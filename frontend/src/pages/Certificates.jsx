@@ -158,11 +158,10 @@ const Certificates = () => {
   // GET VERIFY URL
   // =====================================================
 
-  const getVerifyUrl = (certificate) => {
-  const host = window.location.hostname;
-
-  return `http://${host}:3000/verify-certificate/${certificate.qrToken}`;
-};
+  // Built from the running origin so the public link is correct on Vercel,
+  // a LAN host or localhost instead of a fixed dev port.
+  const getVerifyUrl = (certificate) =>
+    `${window.location.origin}/verify-certificate/${certificate.qrToken}`;
 
   // =====================================================
   // LOADING
@@ -602,13 +601,13 @@ const Certificates = () => {
                             "cursive",
                         }}
                       >
-                        Nihal Hussain
+                        Campus Clubs
                       </div>
 
                       <div className="mt-2 w-48 border-t border-black" />
 
                       <p className="mt-2 text-sm sm:text-base font-semibold">
-                        Authorized Signature
+                        Issued by
                       </p>
 
                     </div>

@@ -1,8 +1,24 @@
 import Groq from "groq-sdk";
+import buildCampusContext from "./agentContext.js";
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+import { GROQ_API_KEY, GROQ_MODEL } from "../config/env.js";
+
+// The SDK throws when constructed without a key, which would crash the whole
+// server at import time on a deploy that forgot GROQ_API_KEY. Build it on the
+// first request instead so only the assistant is affected.
+let client = null;
+
+const getClient = () => {
+  if (!GROQ_API_KEY) {
+    throw new Error(
+      "The AI assistant is not configured. Set GROQ_API_KEY on the server."
+    );
+  }
+
+  if (!client) client = new Groq({ apiKey: GROQ_API_KEY });
+
+  return client;
+};
 
 const agentService = {
   async chat(message, user = null) {
@@ -11,42 +27,55 @@ const agentService = {
         throw new Error("Message is required");
       }
 
+      const client = getClient();
+      const campus = await buildCampusContext(user);
+
       const systemPrompt = `
-You are Campus Clubs AI Assistant.
+You are the Campus Clubs assistant for a college events and clubs platform.
 
-You are an intelligent assistant for a college campus management platform called "Campus Clubs".
+You answer questions about clubs, events, registrations, attendance,
+certificates, notifications and profiles.
 
-Your responsibilities:
-- Help students understand and use Campus Clubs.
-- Answer questions about clubs, events, registrations, attendance, certificates, notifications and profiles.
-- Give simple and accurate explanations.
-- Help users navigate the website.
-- If the user asks something unrelated to Campus Clubs, you can still answer briefly and politely.
-- Never claim that you performed an action if you did not actually perform it.
-- Do not invent event names, club names, certificates, dates or user information.
-- Keep answers concise and friendly.
-- Use simple language suitable for college students.
+AUTHORITATIVE CAMPUS DATA
+${JSON.stringify(campus)}
 
-Current user information:
-${user
-  ? `
-Name: ${user.name || "Not available"}
-Email: ${user.email || "Not available"}
-Role: ${user.role || "student"}
-Student ID: ${user.studentId || "Not available"}
-Department: ${user.department || "Not available"}
-Course: ${user.course || "Not available"}
-`
-  : "User information is not available."}
+Rules for that data:
+- It is a live snapshot taken from the database at the moment of this request.
+- Treat it as the only source of truth about names, dates, counts, venues,
+  capacity, registration and attendance. Quote from it directly.
+- If it does not contain what the user asked for, say plainly that you do not
+  have that information. Never guess, and never invent clubs, events, dates,
+  numbers or people.
+- Do not describe a button, menu or page unless it is listed below.
 
-If the user asks about something that requires accessing actual database information, explain that the assistant needs the relevant Campus Clubs data/API rather than making up information.
-`;
+The product itself:
+- Students browse and register for events on the Events page, join or leave
+  clubs on the Clubs page, and see dates on the Calendar page.
+- Registering for an upcoming event issues a QR check-in code, shown on the
+  Events page once the event is live; the organiser verifies it.
+- Certificates appear on the My Certificates page after attendance is recorded,
+  and any certificate can be verified from its public link.
+- Notifications appear in the bell menu in the header and on the Notifications
+  page. Profile editing happens on Account Settings.
+- Club leaders get a Dashboard with their clubs, event creation, the check-in
+  desk and the attendance roster. Administrators get the Admin panel.
 
-      const completion = await groq.chat.completions.create({
-        model:
-          process.env.GROQ_MODEL ||
-          "llama-3.3-70b-versatile",
+Style:
+- Keep answers concise and friendly, in simple language for college students.
+- Restate the snapshot in plain words. Never print its raw JSON keys or field
+  names back to the user.
+- Never claim you performed an action you did not perform.
+${
+  user
+    ? `Signed-in user: ${user.name || "unknown"} (${user.email || "no email"}), role ${
+        user.effectiveRole || user.role || "student"
+      }${user.department ? `, department ${user.department}` : ""}.`
+    : "No user is signed in; describe the public side of the product only."
+}
+`.trim();
 
+      const completion = await client.chat.completions.create({
+        model: GROQ_MODEL || "llama-3.3-70b-versatile",
         messages: [
           {
             role: "system",
@@ -57,9 +86,8 @@ If the user asks about something that requires accessing actual database informa
             content: message.trim(),
           },
         ],
-
-        temperature: 0.5,
-        max_tokens: 500,
+        temperature: 0.4,
+        max_tokens: 700,
       });
 
       const reply =

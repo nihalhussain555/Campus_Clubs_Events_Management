@@ -4,7 +4,8 @@ import {
   getNotifications,
   createNotification,
   markAsRead,
-  markAllAsRead
+  markAllAsRead,
+  deleteNotification
 } from '../controllers/notificationController.js';
 
 import {
@@ -14,37 +15,19 @@ import {
 
 const router = express.Router();
 
-
 // Get logged-in user's notifications
-router.get(
-  '/',
-  verifyToken,
-  getNotifications
-);
-
+router.get('/', verifyToken, getNotifications);
 
 // Admin creates notification
-router.post(
-  '/',
-  verifyToken,
-  verifyAdmin,
-  createNotification
-);
-
+router.post('/', verifyToken, verifyAdmin, createNotification);
 
 // Mark all notifications as read
-router.put(
-  '/read-all',
-  verifyToken,
-  markAllAsRead
-);
-
+router.put('/read-all', verifyToken, markAllAsRead);
 
 // Mark one notification as read
-router.put(
-  '/:id/read',
-  verifyToken,
-  markAsRead
-);
+router.put('/:id/read', verifyToken, markAsRead);
+
+// Dismiss a notification
+router.delete('/:id', verifyToken, deleteNotification);
 
 export default router;

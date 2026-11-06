@@ -22,6 +22,7 @@ import LoadingScreen from '../../components/LoadingScreen';
 import Toast from '../../components/Toast';
 
 import { authAPI, eventAPI } from '../../services/api';
+import { statusLabel as getEventStatus } from '../../utils/eventStatus';
 import EditProfileModal from './components/EditProfileModal';
 
 const ProfilePage = () => {
@@ -164,31 +165,6 @@ const ProfilePage = () => {
   // EVENT STATUS
   // ============================================================
 
-  const getEventStatus = (event) => {
-    const now = new Date();
-    const eventDate = new Date(event.date);
-
-    const status = event.status?.toLowerCase();
-
-    if (status === 'cancelled') {
-      return 'Cancelled';
-    }
-
-    if (
-      status === 'completed' ||
-      status === 'finished' ||
-      eventDate < now
-    ) {
-      return 'Finished';
-    }
-
-    if (status === 'ongoing') {
-      return 'Ongoing';
-    }
-
-    return 'Upcoming';
-  };
-
   // ============================================================
   // UPCOMING EVENTS
   // ============================================================
@@ -219,7 +195,7 @@ const ProfilePage = () => {
         const status = getEventStatus(event);
 
         return (
-          status === 'Finished' ||
+          status === 'Completed' ||
           status === 'Cancelled'
         );
       })
@@ -236,7 +212,7 @@ const ProfilePage = () => {
   const completedEvents = useMemo(() => {
     return registeredEvents.filter(
       (event) =>
-        getEventStatus(event) === 'Finished'
+        getEventStatus(event) === 'Completed'
     );
   }, [registeredEvents]);
 
@@ -1136,8 +1112,8 @@ const EventCard = ({
   const isCancelled =
     status === 'Cancelled';
 
-  const isFinished =
-    status === 'Finished';
+  const isCompleted =
+    status === 'Completed';
 
   const isOngoing =
     status === 'Ongoing';
@@ -1152,7 +1128,7 @@ const EventCard = ({
       'border-red-200 bg-red-50 text-red-600';
 
     StatusIcon = XCircle;
-  } else if (isFinished) {
+  } else if (isCompleted) {
     statusClass =
       'border-slate-200 bg-slate-100 text-slate-600';
 

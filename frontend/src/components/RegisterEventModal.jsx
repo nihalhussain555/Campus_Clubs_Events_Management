@@ -1,25 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Calendar, MapPin, Users, X } from 'lucide-react';
 
 const RegisterEventModal = ({ event, isOpen, onClose, onConfirm, loading }) => {
-  const initialFormData = {
-    specialRequirements: '',
-    dietaryRestrictions: '',
-  };
-
-  const [formData, setFormData] = useState(initialFormData);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setFormData(initialFormData);
-    }
-  }, [isOpen]);
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
   const handleClose = () => {
     if (loading) return;
     onClose();
@@ -28,7 +10,7 @@ const RegisterEventModal = ({ event, isOpen, onClose, onConfirm, loading }) => {
   const handleSubmit = (e) => {
     if (loading) return;
     e.preventDefault();
-    onConfirm(formData);
+    onConfirm();
   };
 
   const formatDate = (dateString) =>
@@ -79,27 +61,11 @@ const RegisterEventModal = ({ event, isOpen, onClose, onConfirm, loading }) => {
             </div>
           </div>
 
-          <div>
-            <label className="field-label">Special requirements</label>
-            <textarea
-              name="specialRequirements"
-              value={formData.specialRequirements}
-              onChange={handleChange}
-              className="field min-h-24"
-              placeholder="Accessibility needs, mobility assistance, or equipment requests"
-            />
-          </div>
-
-          <div>
-            <label className="field-label">Dietary restrictions</label>
-            <textarea
-              name="dietaryRestrictions"
-              value={formData.dietaryRestrictions}
-              onChange={handleChange}
-              className="field min-h-24"
-              placeholder="Vegetarian, vegan, gluten-free, allergies"
-            />
-          </div>
+          <p className="text-sm leading-6 text-slate-600">
+            Registering reserves your place and generates a check-in code the
+            organiser scans on the day. Certificates are issued once your
+            attendance is verified.
+          </p>
 
           <div className="grid gap-3 border-t border-slate-200 pt-5 sm:grid-cols-2">
             <button
