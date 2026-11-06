@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { CORS_ORIGINS } from './config/env.js';
+import { CORS_ORIGINS } from './config/env';
 import { authLimiter, agentLimiter } from './middleware/rateLimiters.js';
 import authRoutes from './routes/authRoutes.js';
 import clubRoutes from './routes/clubRoutes.js';
@@ -24,7 +24,7 @@ app.use(
   })
 );
 
-const allowlist = new Set(FRONTEND_URL);
+const allowlist = new Set(CORS_ORIGINS);
 
 app.use(
   cors({
