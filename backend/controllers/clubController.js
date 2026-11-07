@@ -1,6 +1,7 @@
 import Club from '../models/Club.js';
 import User from '../models/User.js';
 import Event from '../models/Event.js';
+import { announce } from '../services/announcementService.js';
 
 // =====================================================
 // CREATE CLUB - ADMIN ONLY
@@ -28,6 +29,13 @@ export const createClub = async (req, res) => {
     const populatedClub = await Club.findById(club._id)
       .populate('admin', 'name email')
       .populate('members', 'name email');
+
+    await announce({
+      title: `New club: ${club.clubName}`,
+      message:
+        `${club.clubName} is now open for members.`,
+      type: 'club'
+    });
 
     res.status(201).json({
       message: 'Club created successfully',

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import {
   Bell,
@@ -7,6 +8,7 @@ import {
   Award,
   AlertTriangle,
   Info,
+  MapPin,
   Trash2,
   CheckCheck
 } from 'lucide-react';
@@ -396,6 +398,36 @@ const Notifications = () => {
                             <p className="mt-1 text-sm leading-6 text-slate-600">
                               {notification.message}
                             </p>
+
+                            {/* Campus announcements carry the event document so
+                                the schedule renders in each reader's own zone. */}
+                            {notification.event?._id && (
+
+                              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-slate-50 px-3 py-2">
+
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                                  <Calendar size={14} className="text-[#145f82]" />
+                                  {formatDate(notification.event.date)}
+                                </span>
+
+                                {notification.event.location && (
+                                  <span className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                                    <MapPin size={14} className="text-[#145f82]" />
+                                    {notification.event.location}
+                                  </span>
+                                )}
+
+                                <Link
+                                  to="/events"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-xs font-black text-[#145f82] hover:underline"
+                                >
+                                  View event
+                                </Link>
+
+                              </div>
+
+                            )}
 
                           </div>
 

@@ -1,11 +1,17 @@
 import React, { useEffect, useState } from "react";
 
+import { Link } from "react-router-dom";
+
 import {
   Award,
-  ExternalLink,
+  CalendarDays,
   Download,
+  Eye,
+  Hash,
+  MapPin,
+  ShieldCheck,
+  Tag,
   X,
-  Calendar,
 } from "lucide-react";
 
 import { QRCodeSVG } from "qrcode.react";
@@ -158,9 +164,11 @@ const Certificates = () => {
   // GET VERIFY URL
   // =====================================================
 
-  // Built from the running origin so the public link is correct on Vercel,
-  // a LAN host or localhost instead of a fixed dev port.
+  // Prefer the link the server was configured with, so a code scanned on a
+  // phone resolves to the public site; fall back to the running origin, which
+  // keeps a LAN or localhost preview working.
   const getVerifyUrl = (certificate) =>
+    certificate.verificationUrl ||
     `${window.location.origin}/verify-certificate/${certificate.qrToken}`;
 
   // =====================================================
@@ -212,8 +220,18 @@ const Certificates = () => {
             </h1>
 
             <p className="section-copy mt-4">
-              Certificates earned from campus events.
+              Every certificate you have earned, with the QR link anyone
+              can use to check that it is genuine.
             </p>
+
+            {certificates.length > 0 && (
+              <p className="chip mt-5">
+                {certificates.length}{" "}
+                {certificates.length === 1
+                  ? "certificate"
+                  : "certificates"}
+              </p>
+            )}
 
           </div>
 
@@ -224,21 +242,27 @@ const Certificates = () => {
 
           {certificates.length === 0 ? (
 
-            <div className="app-card text-center">
+            <div className="app-card py-14 text-center">
 
-              <Award
-                size={48}
-                className="mx-auto mb-4 text-slate-300"
-              />
+              <div className="icon-tile mx-auto">
+                <Award size={26} />
+              </div>
 
-              <h2 className="text-xl font-black">
+              <h2 className="mt-5 text-2xl font-black">
                 No certificates yet
               </h2>
 
-              <p className="mt-2 text-slate-500">
-                Attend registered events to receive
-                certificates.
+              <p className="mx-auto mt-2 max-w-md text-slate-500">
+                Certificates are issued automatically once you check in
+                at an event you registered for.
               </p>
+
+              <Link
+                to="/events"
+                className="btn-primary mx-auto mt-6"
+              >
+                Browse events
+              </Link>
 
             </div>
 
@@ -255,95 +279,140 @@ const Certificates = () => {
 
                   <article
                     key={certificate._id}
-                    className="app-card"
+                    className="app-card app-card-hover flex flex-col"
                   >
 
-                    {/* Certificate heading */}
+                    {/* Club and event */}
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-start justify-between gap-4">
 
-                      <Award
-                        className="text-[#145f82]"
-                        size={24}
+                      <div className="min-w-0">
+
+                        <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+                          {certificate.clubName || "Campus Club"}
+                        </p>
+
+                        <h3 className="mt-1 text-2xl font-black">
+                          {certificate.eventName}
+                        </h3>
+
+                      </div>
+
+                      <div className="icon-tile">
+                        <Award size={22} />
+                      </div>
+
+                    </div>
+
+
+                    {/* Details */}
+
+                    <dl className="mt-5 grid grid-cols-[1rem_auto_1fr] items-center gap-x-3 gap-y-2.5 text-sm">
+
+                      <CalendarDays
+                        size={16}
+                        className="text-slate-400"
                       />
 
-                      <h2 className="text-xl font-black">
-                        Certificate
-                      </h2>
+                      <dt className="text-slate-500">
+                        Event date
+                      </dt>
 
-                    </div>
+                      <dd className="font-bold text-slate-800">
+                        {formatDate(certificate.eventDate)}
+                      </dd>
 
+                      <MapPin
+                        size={16}
+                        className="text-slate-400"
+                      />
 
-                    {/* Event name */}
+                      <dt className="text-slate-500">
+                        Location
+                      </dt>
 
-                    <h3 className="mt-4 text-2xl font-black">
-                      {certificate.eventName}
-                    </h3>
+                      <dd className="truncate font-bold text-slate-800">
+                        {certificate.location || "TBD"}
+                      </dd>
 
+                      <Tag
+                        size={16}
+                        className="text-slate-400"
+                      />
 
-                    {/* Certificate ID */}
+                      <dt className="text-slate-500">
+                        Category
+                      </dt>
 
-                    <div className="mt-5 rounded-xl border p-4">
+                      <dd className="font-bold text-slate-800">
+                        {certificate.category || "General"}
+                      </dd>
 
-                      <p className="text-xs font-bold text-slate-500">
+                      <Hash
+                        size={16}
+                        className="text-slate-400"
+                      />
+
+                      <dt className="text-slate-500">
                         Certificate ID
-                      </p>
+                      </dt>
 
-                      <p className="font-mono font-bold break-all">
+                      <dd className="break-all font-mono text-xs font-bold text-slate-800">
                         {certificate.certificateId}
+                      </dd>
+
+                    </dl>
+
+
+                    {/* Actions sit at the bottom so cards line up */}
+
+                    <div className="mt-auto">
+
+                      <div className="mt-6 grid grid-cols-2 gap-3">
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedCertificate(
+                              certificate
+                            )
+                          }
+                          className="btn-primary flex items-center justify-center gap-2"
+                        >
+
+                          <Eye size={16} />
+
+                          View
+
+                        </button>
+
+
+                        <a
+                          href={verifyUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn-secondary flex items-center justify-center gap-2"
+                        >
+
+                          <ShieldCheck size={16} />
+
+                          Verify
+
+                        </a>
+
+                      </div>
+
+
+                      {/* Issued date */}
+
+                      <p className="mt-4 text-xs text-slate-500">
+                        Issued{" "}
+                        {formatDate(
+                          certificate.issuedAt
+                        )}
                       </p>
 
                     </div>
-
-
-                    {/* Buttons */}
-
-                    <div className="grid grid-cols-2 gap-3 mt-6">
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSelectedCertificate(
-                            certificate
-                          )
-                        }
-                        className="btn-primary flex justify-center items-center gap-2"
-                      >
-
-                        <ExternalLink size={16} />
-
-                        View Certificate
-
-                      </button>
-
-
-                      <a
-                        href={verifyUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn-secondary flex justify-center items-center gap-2"
-                      >
-
-                        <ExternalLink size={16} />
-
-                        Verify
-
-                      </a>
-
-                    </div>
-
-
-                    {/* Issued date */}
-
-                    <p className="mt-5 text-sm text-slate-500">
-
-                      Issued:{" "}
-
-                      {formatDate(
-                        certificate.issuedAt
-                      )}
-
-                    </p>
 
                   </article>
 
@@ -402,86 +471,20 @@ const Certificates = () => {
                 CERTIFICATE
             ================================================= */}
 
-            <div
-              className="relative mx-auto w-full overflow-hidden border border-slate-300 bg-white shadow-lg"
-              style={{
-                aspectRatio: "1.414 / 1",
-                minHeight: "520px",
-              }}
-            >
+            <div className="certificate-sheet">
 
               {/* =================================================
                   LEFT CURVED DESIGN
               ================================================= */}
 
-              <div
-                className="absolute left-0 top-0 h-full w-[40%] overflow-hidden"
-              >
+              <div className="certificate-curve" aria-hidden="true">
 
-                {/* Gray background curve */}
-
-                <div
-                  className="absolute -left-[45%] -top-[10%] h-[120%] w-[120%] rounded-full"
-                  style={{
-                    background:
-                      "#bfc1c3",
-                  }}
-                />
-
-
-                {/* Blue curve */}
-
-                <div
-                  className="absolute -left-[58%] -top-[8%] h-[116%] w-[105%] rounded-full border-[18px] border-white"
-                  style={{
-                    background:
-                      "#2587bb",
-                  }}
-                />
-
-
-                {/* Gray inner curve */}
-
-                <div
-                  className="absolute -left-[45%] top-[5%] h-[92%] w-[95%] rounded-full border-[12px] border-white"
-                  style={{
-                    background:
-                      "#c6c7c9",
-                  }}
-                />
-
-
-                {/* White inner curve */}
-
-                <div
-                  className="absolute -left-[28%] top-[8%] h-[82%] w-[90%] rounded-full"
-                  style={{
-                    background:
-                      "#ffffff",
-                  }}
-                />
-
-
-                {/* Bottom navy shape */}
-
-                <div
-                  className="absolute -bottom-[25%] -left-[20%] h-[48%] w-[100%] rotate-[-25deg]"
-                  style={{
-                    background:
-                      "#243746",
-                  }}
-                />
-
-
-                {/* Bottom blue curve */}
-
-                <div
-                  className="absolute -bottom-[20%] -left-[30%] h-[30%] w-[105%] rotate-[-25deg] border-t-[10px] border-white"
-                  style={{
-                    background:
-                      "#2587bb",
-                  }}
-                />
+                <span className="certificate-arc-a" />
+                <span className="certificate-arc-b" />
+                <span className="certificate-arc-c" />
+                <span className="certificate-arc-d" />
+                <span className="certificate-arc-e" />
+                <span className="certificate-arc-f" />
 
               </div>
 
@@ -490,169 +493,111 @@ const Certificates = () => {
                   CERTIFICATE CONTENT
               ================================================= */}
 
-              <div className="relative z-10 flex h-full min-h-[520px] flex-col">
+              <div className="certificate-body">
 
-                {/* Company */}
+                <p className="certificate-brand">
+                  Campus Clubs
+                </p>
 
-                <div className="px-8 pt-7 sm:px-12">
+                <div className="certificate-main">
 
-                  <h2 className="text-xl sm:text-2xl font-black text-black">
-                    Campus Clubs
-                  </h2>
-
-                </div>
-
-
-                {/* Main content */}
-
-                <div className="flex flex-1 flex-col items-center justify-center px-8 sm:px-16">
-
-                  {/* Presented text */}
-
-                  <p
-                    className="text-center text-sm sm:text-lg font-bold tracking-[0.18em] text-black"
-                    style={{
-                      marginLeft: "15%",
-                    }}
-                  >
-                    PARTICIPATION CERTIFICATE
+                  <p className="certificate-kicker">
+                    Participation Certificate
                   </p>
 
-                  <p
-                    className="mt-4 text-center text-base sm:text-2xl font-semibold text-black"
-                    style={{
-                      marginLeft: "15%",
-                    }}
-                  >
-                    THIS CERTIFICATE IS PROUDLY PRESENTED TO:
+                  <p className="certificate-lead">
+                    This certificate is proudly presented to
                   </p>
 
-
-                  {/* Student name */}
-
-                  <h1
-                    className="mt-5 text-center text-2xl sm:text-4xl font-normal text-black"
-                    style={{
-                      marginLeft: "15%",
-                    }}
-                  >
+                  <h1 className="certificate-name">
                     {getStudentName(
                       selectedCertificate
                     )}
                   </h1>
 
+                  <div className="certificate-rule" />
 
-                  {/* Divider */}
+                  <p className="certificate-for">
+                    for taking part in
+                  </p>
 
-                  <div
-                    className="mt-4 h-[3px] bg-black"
-                    style={{
-                      width: "70%",
-                      marginLeft: "15%",
-                    }}
-                  />
-
-
-                  {/* Event */}
-
-                  <h2
-                    className="mt-5 text-center text-lg sm:text-2xl font-serif font-bold text-black"
-                    style={{
-                      marginLeft: "15%",
-                    }}
-                  >
+                  <h2 className="certificate-event">
                     {selectedCertificate.eventName}
                   </h2>
 
+                </div>
 
-                  {/* QR + right information */}
 
-                  <div
-                    className="mt-7 flex w-full items-center justify-center gap-10 sm:gap-20"
-                    style={{
-                      marginLeft: "15%",
-                    }}
-                  >
+                {/* Three equal cells keep the footer aligned */}
 
-                    {/* QR */}
+                <div className="certificate-footer">
 
-                    <div className="flex flex-col items-center">
+                  <div className="certificate-cell">
+
+                    <p className="certificate-value">
+                      {formatDate(
+                        selectedCertificate.eventDate ||
+                        selectedCertificate.issuedAt
+                      )}
+                    </p>
+
+                    <div className="certificate-line" />
+
+                    <p className="certificate-caption">
+                      Date
+                    </p>
+
+                  </div>
+
+
+                  <div className="certificate-cell">
+
+                    <div className="certificate-qr">
 
                       <QRCodeSVG
                         value={getVerifyUrl(
                           selectedCertificate
                         )}
-                        size={145}
+                        size={120}
                         level="H"
                         includeMargin={false}
                       />
 
                     </div>
 
-
-                    {/* Signature */}
-
-                    <div className="flex flex-col items-center">
-
-                      <div
-                        className="text-xl sm:text-3xl font-semibold italic"
-                        style={{
-                          fontFamily:
-                            "cursive",
-                        }}
-                      >
-                        Campus Clubs
-                      </div>
-
-                      <div className="mt-2 w-48 border-t border-black" />
-
-                      <p className="mt-2 text-sm sm:text-base font-semibold">
-                        Issued by
-                      </p>
-
-                    </div>
+                    <p className="certificate-caption">
+                      Scan to verify
+                    </p>
 
                   </div>
 
 
-                  {/* Bottom details */}
+                  <div className="certificate-cell">
 
-                  <div
-                    className="mt-7 flex w-full items-end justify-center gap-10 sm:gap-20"
-                    style={{
-                      marginLeft: "15%",
-                    }}
-                  >
+                    <p className="certificate-sign">
+                      Campus Clubs
+                    </p>
 
-                    {/* Date */}
+                    <div className="certificate-line" />
 
-                    <div className="text-center">
-
-                      <div className="w-40 sm:w-52 border-t border-black" />
-
-                      <p className="mt-2 text-sm sm:text-base font-semibold">
-                        {formatDate(
-                          selectedCertificate.eventDate ||
-                          selectedCertificate.issuedAt
-                        )}
-                      </p>
-
-                    </div>
-
-
-                    {/* Certificate ID */}
-
-                    <div className="max-w-[240px] text-center">
-
-                      <p className="text-xs sm:text-sm font-mono break-all text-blue-700">
-                        {selectedCertificate.certificateId}
-                      </p>
-
-                    </div>
+                    <p className="certificate-caption">
+                      Issued by
+                    </p>
 
                   </div>
 
                 </div>
+
+
+                <p className="certificate-meta">
+                  {selectedCertificate.clubName || "Campus Club"}
+                  {" · "}
+                  {selectedCertificate.location || "TBD"}
+                </p>
+
+                <p className="certificate-id">
+                  {selectedCertificate.certificateId}
+                </p>
 
               </div>
 
@@ -695,6 +640,310 @@ const Certificates = () => {
         </div>
 
       )}
+
+      {/* =====================================================
+          CERTIFICATE PAPER STYLES
+
+          A certificate is a document, so it keeps one fixed paper palette
+          whatever the app theme is. Literal hex on private class names is
+          deliberate: the dark stylesheet only ever re-declares Tailwind
+          utility names, so it cannot reach these.
+      ===================================================== */}
+
+      <style>
+        {`
+          .certificate-sheet {
+            position: relative;
+            display: flex;
+            width: 100%;
+            min-height: 520px;
+            aspect-ratio: 1.414 / 1;
+            overflow: hidden;
+            border: 1px solid #d4dbe2;
+            background: #ffffff;
+            box-shadow: 0 18px 50px rgba(15, 23, 42, 0.14);
+          }
+
+          .certificate-curve {
+            position: relative;
+            flex: 0 0 30%;
+            overflow: hidden;
+          }
+
+          .certificate-curve > span {
+            position: absolute;
+            display: block;
+            border-radius: 9999px;
+          }
+
+          .certificate-arc-a {
+            top: -10%;
+            left: -70%;
+            width: 165%;
+            height: 120%;
+            background: #bfc1c3;
+          }
+
+          .certificate-arc-b {
+            top: -8%;
+            left: -90%;
+            width: 150%;
+            height: 116%;
+            border: 14px solid #ffffff;
+            background: #2587bb;
+          }
+
+          .certificate-arc-c {
+            top: 5%;
+            left: -62%;
+            width: 140%;
+            height: 92%;
+            border: 10px solid #ffffff;
+            background: #c6c7c9;
+          }
+
+          .certificate-arc-d {
+            top: 8%;
+            left: -35%;
+            width: 135%;
+            height: 82%;
+            background: #ffffff;
+          }
+
+          .certificate-arc-e {
+            bottom: -25%;
+            left: -30%;
+            width: 150%;
+            height: 48%;
+            border-radius: 0;
+            background: #243746;
+            transform: rotate(-25deg);
+          }
+
+          .certificate-arc-f {
+            bottom: -20%;
+            left: -40%;
+            width: 152%;
+            height: 30%;
+            border-radius: 0;
+            border-top: 8px solid #ffffff;
+            background: #2587bb;
+            transform: rotate(-25deg);
+          }
+
+          .certificate-body {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            min-width: 0;
+            padding: 2.25rem 2.5rem 1.75rem;
+          }
+
+          .certificate-brand {
+            font-size: 1.35rem;
+            font-weight: 900;
+            color: #0f172a;
+          }
+
+          .certificate-main {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+          }
+
+          .certificate-kicker {
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.24em;
+            text-transform: uppercase;
+            color: #243746;
+          }
+
+          .certificate-lead {
+            margin-top: 0.9rem;
+            font-size: 0.95rem;
+            color: #334155;
+          }
+
+          .certificate-name {
+            margin-top: 0.9rem;
+            font-size: 2.1rem;
+            font-weight: 600;
+            color: #0b1b2b;
+          }
+
+          .certificate-rule {
+            margin-top: 0.8rem;
+            width: 62%;
+            height: 2px;
+            background: #243746;
+          }
+
+          .certificate-for {
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #334155;
+          }
+
+          .certificate-event {
+            margin-top: 0.3rem;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #0b1b2b;
+          }
+
+          .certificate-footer {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            align-items: end;
+            padding-top: 1rem;
+          }
+
+          .certificate-cell {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.35rem;
+            min-width: 0;
+          }
+
+          .certificate-value {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #0b1b2b;
+          }
+
+          .certificate-sign {
+            font-family: cursive;
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #1d4ed8;
+          }
+
+          .certificate-line {
+            width: 100%;
+            border-top: 1.5px solid #243746;
+          }
+
+          .certificate-caption {
+            font-size: 0.66rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #64748b;
+          }
+
+          .certificate-qr {
+            display: flex;
+          }
+
+          .certificate-qr svg {
+            width: 100%;
+            max-width: 7.25rem;
+            height: auto;
+          }
+
+          .certificate-meta {
+            margin-top: 1.25rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: #64748b;
+          }
+
+          .certificate-id {
+            text-align: center;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.72rem;
+            word-break: break-all;
+            color: #1d4ed8;
+          }
+
+          @media (max-width: 640px) {
+            .certificate-sheet {
+              min-height: 520px;
+            }
+
+            .certificate-curve {
+              flex-basis: 22%;
+            }
+
+            .certificate-body {
+              padding: 1.1rem 1rem 0.85rem;
+            }
+
+            .certificate-brand {
+              font-size: 0.95rem;
+            }
+
+            .certificate-kicker {
+              font-size: 0.58rem;
+              letter-spacing: 0.14em;
+            }
+
+            .certificate-lead {
+              margin-top: 0.55rem;
+              font-size: 0.7rem;
+            }
+
+            .certificate-name {
+              margin-top: 0.55rem;
+              font-size: 1.3rem;
+            }
+
+            .certificate-rule {
+              margin-top: 0.5rem;
+              width: 70%;
+            }
+
+            .certificate-for {
+              margin-top: 0.6rem;
+              font-size: 0.7rem;
+            }
+
+            .certificate-event {
+              font-size: 1rem;
+            }
+
+            .certificate-footer {
+              gap: 0.6rem;
+              padding-top: 0.5rem;
+            }
+
+            .certificate-value {
+              font-size: 0.75rem;
+            }
+
+            .certificate-sign {
+              font-size: 1rem;
+            }
+
+            .certificate-caption {
+              font-size: 0.5rem;
+              letter-spacing: 0.08em;
+            }
+
+            .certificate-qr svg {
+              max-width: 5rem;
+            }
+
+            .certificate-meta {
+              margin-top: 0.75rem;
+              font-size: 0.6rem;
+            }
+
+            .certificate-id {
+              font-size: 0.58rem;
+            }
+          }
+        `}
+      </style>
 
     </div>
   );

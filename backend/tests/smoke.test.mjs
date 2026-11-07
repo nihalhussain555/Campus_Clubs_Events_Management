@@ -1694,6 +1694,163 @@ await test('pagination and bad query parameters are handled', async () => {
   assert.equal(brackets.data.entries.length, 0);
 });
 
+// ---------------------------------------------------------------- announcements
+
+const inboxFor = async (who) => {
+  const res = await call('GET', '/notifications', { token: who.token });
+  assert.equal(res.status, 200);
+  return res.data.notifications;
+};
+
+await test('creating a club tells every student', async () => {
+  const { status } = await call('POST', '/clubs', {
+    token: admin.token,
+    body: { clubName: 'Chess Circle', description: 'Play' },
+  });
+  assert.equal(status, 201);
+
+  const notices = (await inboxFor(student)).filter(
+    (n) => n.type === 'club' && /Chess Circle/.test(n.title)
+  );
+
+  assert.equal(notices.length, 1, 'a student never heard about the new club');
+  assert.equal(notices[0].isRead, false);
+
+  // Broadcasts are one shared document, not one row per recipient.
+  assert.equal(
+    await Notification.countDocuments({
+      user: null,
+      title: { $regex: 'Chess Circle' },
+    }),
+    1,
+    'the announcement was fanned out per student'
+  );
+});
+
+await test('creating an event announces it with a schedule the reader localises', async () => {
+  const created = await call('POST', '/events', {
+    token: admin.token,
+    body: {
+      title: 'Robot Derby',
+      description: 'Bots fight',
+      date: future(48),
+      endDate: future(52),
+      location: 'Hall 2',
+      club: clubId,
+    },
+  });
+  assert.equal(created.status, 201);
+
+  const notices = await inboxFor(other);
+  const notice = notices.find(
+    (n) => n.type === 'event' && /Robot Derby/.test(n.title)
+  );
+
+  assert.ok(notice, 'no announcement for the new event');
+  assert.equal(notice.event?.title, 'Robot Derby');
+  assert.ok(notice.event?.date, 'the event document was not populated');
+  assert.equal(
+    notice.event.location,
+    'Hall 2',
+    'the announcement carried no place to show up at'
+  );
+
+  await call('PUT', `/notifications/${notice._id}/read`, {
+    token: other.token,
+  });
+
+  const afterOther = await inboxFor(other);
+  assert.equal(
+    afterOther.find((n) => n._id === notice._id).isRead,
+    true,
+    'a broadcast did not record the read'
+  );
+
+  const afterStudent = await inboxFor(student);
+  assert.equal(
+    afterStudent.find((n) => n._id === notice._id).isRead,
+    false,
+    'one reader marked the broadcast read for the whole campus'
+  );
+
+  await call('DELETE', `/events/${created.data.event._id}`, {
+    token: admin.token,
+  });
+});
+
+await test('a cancellation is announced once, and a reopening says so', async () => {
+  const created = await call('POST', '/events', {
+    token: admin.token,
+    body: {
+      title: 'Quiz Bowl',
+      description: 'Questions',
+      date: future(96),
+      endDate: future(99),
+      club: clubId,
+    },
+  });
+  const eventId = created.data.event._id;
+
+  await call('PUT', `/events/${eventId}`, {
+    token: admin.token,
+    body: { status: 'cancelled' },
+  });
+
+  // A second edit on an already cancelled event must not repeat the notice.
+  await call('PUT', `/events/${eventId}`, {
+    token: admin.token,
+    body: { status: 'cancelled', location: 'Hall 1' },
+  });
+
+  const cancelled = (await inboxFor(student)).filter(
+    (n) => n.type === 'cancellation' && /Quiz Bowl/.test(n.title)
+  );
+  assert.equal(cancelled.length, 1, 'the cancellation was announced twice');
+
+  const reopened = await call('PUT', `/events/${eventId}`, {
+    token: admin.token,
+    body: { status: 'upcoming' },
+  });
+  assert.equal(reopened.status, 200);
+  assert.notEqual(
+    reopened.data.event.status,
+    'cancelled',
+    'a cancelled event could not be reopened'
+  );
+
+  const back = (await inboxFor(student)).filter(
+    (n) => n.type === 'event' && /back on the schedule/.test(n.title)
+  );
+  assert.equal(back.length, 1, 'the reopening was not announced');
+
+  await call('DELETE', `/events/${eventId}`, { token: admin.token });
+});
+
+await test('deleting an event announces it without a broken link', async () => {
+  const created = await call('POST', '/events', {
+    token: admin.token,
+    body: {
+      title: 'Paintball Day',
+      description: 'Outside',
+      date: future(120),
+      endDate: future(126),
+      club: clubId,
+    },
+  });
+
+  const { status } = await call('DELETE', `/events/${created.data.event._id}`, {
+    token: admin.token,
+  });
+  assert.equal(status, 200);
+
+  const notice = (await inboxFor(student)).find(
+    (n) => n.type === 'cancellation' && /Paintball Day/.test(n.title)
+  );
+
+  assert.ok(notice, 'the removal was not announced');
+  assert.ok(!notice.event, 'the notice still points at a deleted event');
+});
+
 // ---------------------------------------------------------------- summary
 
 const failed = results.filter((r) => r[0] === 'FAIL');

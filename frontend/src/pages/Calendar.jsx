@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 
 import Navbar from '../components/Navbar';
+import AddToCalendar from '../components/AddToCalendar';
 import LoadingScreen from '../components/LoadingScreen';
 import Toast from '../components/Toast';
 import { eventAPI } from '../services/api';
@@ -718,7 +719,12 @@ useEffect(() => {
 
               </div>
 
-              <div className="mt-6 flex justify-end">
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+
+                <AddToCalendar
+                  event={selectedEvent}
+                  onNotify={setToast}
+                />
 
                 <button
                   type="button"

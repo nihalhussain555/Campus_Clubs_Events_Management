@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Activity,
   AlertTriangle,
+  Ban,
   Bell,
   Briefcase,
   Calendar,
@@ -37,6 +38,7 @@ import Toast from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import AnalyticsCharts from '../components/AnalyticsCharts';
 import { getEventStatus } from '../utils/eventStatus';
+import { withInstantTimes } from '../utils/eventTime';
 import { ACTIVITY_OPTIONS } from '../utils/activityTypes';
 
 const XP_TYPE_LABELS = {
@@ -852,6 +854,48 @@ const AdminPanel = () => {
     }
   };
 
+  // --------------------------------------------------
+  // CANCEL OR REOPEN AN EVENT
+  // The backend turns the transition into a campus-wide notification, so the
+  // admin does not have to message anyone separately.
+  // --------------------------------------------------
+
+  const requestCancelEvent = (event) => {
+    const cancelling = getEventStatus(event) !== 'cancelled';
+
+    setPendingAction({
+      title: cancelling
+        ? `Cancel ${event.title}?`
+        : `Reopen ${event.title}?`,
+      message: cancelling
+        ? 'Every student is told the event is off. Registrations are kept, so it can be reopened if plans change.'
+        : 'The event goes back on the schedule using its own dates, and students are told it is running again.',
+      confirmLabel: cancelling ? 'Cancel event' : 'Reopen event',
+      run: async () => {
+        try {
+          await eventAPI.updateEvent(event._id, {
+            status: cancelling ? 'cancelled' : 'upcoming'
+          });
+
+          setToast({
+            message: cancelling
+              ? 'Event cancelled and announced'
+              : 'Event reopened',
+            type: 'success',
+          });
+
+          await fetchAdminData(false);
+        } catch (error) {
+          setToast({
+            message:
+              error.response?.data?.message || 'Unable to update the event',
+            type: 'error',
+          });
+        }
+      }
+    });
+  };
+
   const requestDeleteEvent = (event) => {
     setPendingAction({
       title: `Delete ${event.title}?`,
@@ -934,7 +978,7 @@ const AdminPanel = () => {
     }
 
     try {
-      await eventAPI.createEvent(newEvent);
+      await eventAPI.createEvent(withInstantTimes(newEvent));
 
       setToast({
         message: 'Event created successfully',
@@ -2258,19 +2302,41 @@ const AdminPanel = () => {
                               </span>
                             </td>
 
-                            <td className="table-cell text-right">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  requestDeleteEvent(
-                                    event
-                                  )
-                                }
-                                className="btn-danger px-3"
-                                aria-label={`Delete ${event.title}`}
-                              >
-                                <Trash2 size={16} />
-                              </button>
+                            <td className="table-cell">
+                              <div className="flex justify-end gap-2">
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    requestCancelEvent(event)
+                                  }
+                                  className="btn-soft px-3"
+                                  aria-label={
+                                    status === 'cancelled'
+                                      ? `Reopen ${event.title}`
+                                      : `Cancel ${event.title}`
+                                  }
+                                >
+                                  <Ban size={16} />
+                                  {status === 'cancelled'
+                                    ? 'Reopen'
+                                    : 'Cancel'}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    requestDeleteEvent(
+                                      event
+                                    )
+                                  }
+                                  className="btn-danger px-3"
+                                  aria-label={`Delete ${event.title}`}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+
+                              </div>
                             </td>
 
                           </tr>

@@ -20,8 +20,10 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import Pagination from '../components/Pagination';
 import EventCheckInDesk from '../components/EventCheckInDesk';
+import AddToCalendar from '../components/AddToCalendar';
 
 import { clubAPI, eventAPI } from '../services/api';
+import { withInstantTimes } from '../utils/eventTime';
 import { statusLabel as getEventStatus } from '../utils/eventStatus';
 import { ACTIVITY_OPTIONS } from '../utils/activityTypes';
 
@@ -414,7 +416,7 @@ const Events = () => {
       try {
 
         await eventAPI.createEvent(
-          formData
+          withInstantTimes(formData)
         );
 
         setToast({
@@ -1451,6 +1453,21 @@ const Events = () => {
                         </div>
 
                       </div>
+
+
+                      {/* CALENDAR */}
+
+                      {(status === 'Upcoming' ||
+                        status === 'Ongoing') && (
+
+                        <div className="mb-5">
+                          <AddToCalendar
+                            event={event}
+                            onNotify={setToast}
+                          />
+                        </div>
+
+                      )}
 
 
                       {/* ACTIONS */}

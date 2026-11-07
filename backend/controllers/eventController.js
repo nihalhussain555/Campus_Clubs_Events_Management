@@ -21,6 +21,8 @@ import {
 
 import { settleAttendanceXp } from '../services/attendanceRewardService.js';
 
+import { announce } from '../services/announcementService.js';
+
 import { isActivityType } from '../config/xpRules.js';
 
 import { canManageEvent, canManageClub } from '../middleware/permissions.js';
@@ -35,8 +37,11 @@ const getUserId = (req) => {
 };
 
 
-const getCurrentStatus = (event) => {
-  if (event.status === 'cancelled') {
+const getCurrentStatus = (
+  event,
+  cancelled = event.status === 'cancelled'
+) => {
+  if (cancelled) {
     return 'cancelled';
   }
 
@@ -152,6 +157,18 @@ export const createEvent = async (req, res) => {
       .populate('registeredStudents', 'name email')
       .populate('participants', 'name email')
       .populate('certificateRecipients', 'name email');
+
+    // The date is left out of the text: a broadcast is read by the whole
+    // campus, so the frontend renders notification.event.date in each viewer's
+    // own zone instead of the server baking one in.
+    await announce({
+      title: `New event: ${event.title}`,
+      message:
+        `${populatedEvent?.club?.clubName || 'A club'} is hosting ` +
+        `"${event.title}" at ${event.location}. Register from the Events page.`,
+      type: 'event',
+      event: event._id
+    });
 
     return res.status(201).json({
       success: true,
@@ -342,6 +359,10 @@ export const updateEvent = async (req, res) => {
       });
     }
 
+    // Remembered so the campus is only told once about a cancellation, however
+    // many later edits the organiser makes to the same event.
+    const wasCancelled = event.status === 'cancelled';
+
     const {
       title,
       description,
@@ -426,7 +447,10 @@ export const updateEvent = async (req, res) => {
     if (status === 'cancelled') {
       event.status = 'cancelled';
     } else {
-      event.status = getCurrentStatus(event);
+      // The explicit false lifts a stored cancelled flag. Left to default,
+      // getCurrentStatus would keep honouring it and an event could never be
+      // reopened once cancelled.
+      event.status = getCurrentStatus(event, false);
     }
 
     await event.save();
@@ -436,6 +460,28 @@ export const updateEvent = async (req, res) => {
       .populate('registeredStudents', 'name email')
       .populate('participants', 'name email')
       .populate('certificateRecipients', 'name email');
+
+    if (event.status === 'cancelled' && !wasCancelled) {
+      await announce({
+        title: `Event cancelled: ${event.title}`,
+        message:
+          `"${event.title}" has been cancelled. ` +
+          'Registrations are void and no attendance will be taken.',
+        type: 'cancellation',
+        event: event._id
+      });
+    } else if (wasCancelled && event.status !== 'cancelled') {
+      // Without this the campus keeps a stale "cancelled" notice for an event
+      // that is running again, and nobody turns up.
+      await announce({
+        title: `Event back on the schedule: ${event.title}`,
+        message:
+          `"${event.title}" is running again. ` +
+          'Registrations made before the cancellation still count.',
+        type: 'event',
+        event: event._id
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -477,7 +523,19 @@ export const deleteEvent = async (req, res) => {
       event: event._id
     });
 
+    // Captured before the delete because the announcement outlives the document
+    // it describes, so the event reference is left unset.
+    const deletedTitle = event.title;
+
     await event.deleteOne();
+
+    await announce({
+      title: `Event removed: ${deletedTitle}`,
+      message:
+        `"${deletedTitle}" has been removed from the platform. ` +
+        'Any certificates or attendance it carried were deleted with it.',
+      type: 'cancellation'
+    });
 
     return res.status(200).json({
       success: true,

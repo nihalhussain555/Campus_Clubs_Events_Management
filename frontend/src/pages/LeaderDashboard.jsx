@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Ban,
   Calendar,
   CheckCircle2,
   ClipboardList,
@@ -28,6 +29,7 @@ import {
   activityLabel,
   activityXp
 } from '../utils/activityTypes';
+import { toInputValue, withInstantTimes } from '../utils/eventTime';
 
 const EMPTY_FORM = {
   title: '',
@@ -39,19 +41,6 @@ const EMPTY_FORM = {
   capacity: 100,
   club: '',
   activityType: 'event'
-};
-
-const pad = (part) => String(part).padStart(2, '0');
-
-// datetime-local needs "YYYY-MM-DDTHH:mm" in local time.
-const toInputValue = (value) => {
-  if (!value) return '';
-
-  const d = new Date(value);
-
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
 };
 
 const LeaderDashboard = () => {
@@ -213,10 +202,10 @@ const LeaderDashboard = () => {
 
     try {
       if (formMode === 'edit' && editingEvent) {
-        await eventAPI.updateEvent(editingEvent._id, form);
+        await eventAPI.updateEvent(editingEvent._id, withInstantTimes(form));
         setToast({ message: 'Event updated', type: 'success' });
       } else {
-        await eventAPI.createEvent(form);
+        await eventAPI.createEvent(withInstantTimes(form));
         setToast({ message: 'Event created', type: 'success' });
       }
 
@@ -252,6 +241,43 @@ const LeaderDashboard = () => {
         } catch (error) {
           setToast({
             message: error.response?.data?.message || 'Unable to delete the event',
+            type: 'error'
+          });
+        }
+      }
+    });
+  };
+
+  const requestCancelEvent = (event) => {
+    const cancelling = statusOf(event) !== 'Cancelled';
+
+    setPendingAction({
+      title: cancelling
+        ? `Cancel ${event.title}?`
+        : `Reopen ${event.title}?`,
+      message: cancelling
+        ? 'Everyone on campus is told the event is off. Registrations are kept, so you can reopen it if plans change.'
+        : 'The event goes back on the schedule using its own dates, and students are told it is running again.',
+      confirmLabel: cancelling ? 'Cancel event' : 'Reopen event',
+      tone: cancelling ? 'danger' : 'primary',
+      run: async () => {
+        try {
+          await eventAPI.updateEvent(event._id, {
+            status: cancelling ? 'cancelled' : 'upcoming'
+          });
+
+          setToast({
+            message: cancelling
+              ? 'Event cancelled and announced'
+              : 'Event reopened',
+            type: 'success'
+          });
+
+          await load();
+        } catch (error) {
+          setToast({
+            message:
+              error.response?.data?.message || 'Unable to update the event',
             type: 'error'
           });
         }
@@ -943,6 +969,15 @@ const LeaderDashboard = () => {
                             >
                               <Trophy size={17} />
                               Credit organisers
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => requestCancelEvent(event)}
+                              className="btn-soft"
+                            >
+                              <Ban size={17} />
+                              {status === 'Cancelled' ? 'Reopen' : 'Cancel'}
                             </button>
 
                             <button

@@ -2,11 +2,16 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import {
-  CheckCircle,
-  XCircle,
   Award,
-  Calendar,
+  Building2,
+  CalendarDays,
+  CheckCircle,
+  Hash,
+  HelpCircle,
   ShieldCheck,
+  Tag,
+  User,
+  XCircle
 } from "lucide-react";
 
 import Navbar from "../components/Navbar";
@@ -15,46 +20,55 @@ import LoadingScreen from "../components/LoadingScreen";
 
 import { certificateAPI } from "../services/api";
 
+const formatDate = (value) =>
+  value
+    ? new Date(value).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "—";
+
 const VerifyCertificate = () => {
   const { qrToken } = useParams();
 
   const [certificate, setCertificate] = useState(null);
-  const [valid, setValid] = useState(false);
+  const [reason, setReason] = useState(
+    "This certificate could not be verified."
+  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const verifyCertificate = async () => {
       if (!qrToken) {
-        setValid(false);
+        setReason("This link is missing its verification code.");
         setLoading(false);
+
         return;
       }
 
       try {
-        console.log("QR Token:", qrToken);
-
-        const response = await certificateAPI.verifyCertificate(qrToken);
-
-        console.log("Verification response:", response.data);
+        const response =
+          await certificateAPI.verifyCertificate(qrToken);
 
         if (
           response.data?.verified === true &&
           response.data?.certificate
         ) {
           setCertificate(response.data.certificate);
-          setValid(true);
         } else {
-          setCertificate(null);
-          setValid(false);
+          setReason(
+            response.data?.message ||
+              "This certificate could not be verified."
+          );
         }
       } catch (error) {
-        console.error(
-          "Certificate verification failed:",
-          error.response?.data || error.message
+        // The API answers 400/404 for a bad or unknown token, so the
+        // reader's reason lives on the error response.
+        setReason(
+          error.response?.data?.message ||
+            "Verification failed. Please check the link and try again."
         );
-
-        setCertificate(null);
-        setValid(false);
       } finally {
         setLoading(false);
       }
@@ -64,10 +78,43 @@ const VerifyCertificate = () => {
   }, [qrToken]);
 
   if (loading) {
-    return (
-      <LoadingScreen message="Verifying certificate..." />
-    );
+    return <LoadingScreen message="Verifying certificate..." />;
   }
+
+  const rows = certificate
+    ? [
+        {
+          icon: <User size={15} />,
+          label: "Recipient",
+          value: certificate.studentName || "Student",
+        },
+        {
+          icon: <Award size={15} />,
+          label: "Event",
+          value: certificate.eventName,
+        },
+        {
+          icon: <Building2 size={15} />,
+          label: "Issued by",
+          value: certificate.clubName || "Campus Club",
+        },
+        {
+          icon: <Tag size={15} />,
+          label: "Category",
+          value: certificate.category || "General",
+        },
+        {
+          icon: <CalendarDays size={15} />,
+          label: "Event date",
+          value: formatDate(certificate.eventDate),
+        },
+        {
+          icon: <ShieldCheck size={15} />,
+          label: "Issued on",
+          value: formatDate(certificate.issuedAt),
+        },
+      ]
+    : [];
 
   return (
     <div className="app-page">
@@ -76,56 +123,64 @@ const VerifyCertificate = () => {
       <main className="page-section pt-8">
         <div className="page-container max-w-3xl">
           <div className="app-card">
-
-            {valid && certificate ? (
+            {certificate ? (
               <>
-                <div className="text-center">
-
+                <div className="flex flex-col items-center text-center">
                   <CheckCircle
-                    size={72}
-                    strokeWidth={1.8}
-                    className="mx-auto text-green-600"
+                    size={68}
+                    strokeWidth={1.6}
+                    className="text-green-600"
                   />
 
-                  <h1 className="mt-5 text-3xl font-black text-black">
+                  <h1 className="mt-4 text-3xl font-black text-black">
                     Certificate Verified
                   </h1>
 
-                  <p className="mt-2 font-semibold text-green-600">
+                  <p className="mt-2 font-semibold text-green-700">
                     This certificate is authentic and valid.
                   </p>
-
                 </div>
 
-                <div className="mt-8 space-y-5">
-
-                  <div className="rounded-2xl border border-green-200 bg-green-50 p-5">
-
-                    <div className="flex items-center gap-3">
-
-                      <ShieldCheck
-                        size={25}
-                        className="text-green-600"
-                      />
-
-                      <div>
-
-                        <p className="text-xs font-bold uppercase tracking-wide text-green-700">
-                          Verification Status
-                        </p>
-
-                        <p className="font-black text-green-800">
-                          Verified by Campus Clubs
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                  </div>
+                <div className="mt-7 flex items-center gap-3 rounded-2xl border border-slate-200 bg-green-100 px-5 py-4">
+                  <ShieldCheck
+                    size={24}
+                    className="shrink-0 text-green-700"
+                  />
 
                   <div>
-                    <p className="text-xs font-bold uppercase text-slate-500">
+                    <p className="text-xs font-black uppercase tracking-wide text-green-700">
+                      Verification status
+                    </p>
+
+                    <p className="font-black text-black">
+                      Confirmed by Campus Clubs
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-7 grid gap-x-6 gap-y-5 sm:grid-cols-2">
+                  {rows.map(({ icon, label, value }) => (
+                    <div key={label} className="min-w-0">
+                      <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+                        {icon}
+                        {label}
+                      </p>
+
+                      <p className="mt-1.5 text-base font-bold text-black">
+                        {value || "—"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-7 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+                  <Hash
+                    size={18}
+                    className="shrink-0 text-slate-400"
+                  />
+
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">
                       Certificate ID
                     </p>
 
@@ -133,119 +188,43 @@ const VerifyCertificate = () => {
                       {certificate.certificateId}
                     </p>
                   </div>
-
-                  <div>
-                    <p className="text-xs font-bold uppercase text-slate-500">
-                      Recipient
-                    </p>
-
-                    <p className="mt-1 text-lg font-black text-black">
-                      {certificate.studentName || "Student"}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-bold uppercase text-slate-500">
-                      Certificate Type
-                    </p>
-
-                    <p className="mt-1 font-bold text-black">
-                      Participation Certificate
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-bold uppercase text-slate-500">
-                      Event
-                    </p>
-
-                    <p className="mt-1 text-xl font-black text-black">
-                      {certificate.eventName}
-                    </p>
-                  </div>
-
-                  {certificate.eventDate && (
-                    <div className="flex items-center gap-3">
-
-                      <Calendar
-                        size={19}
-                        className="text-[#145f82]"
-                      />
-
-                      <div>
-
-                        <p className="text-xs font-bold uppercase text-slate-500">
-                          Event Date
-                        </p>
-
-                        <p className="font-semibold">
-                          {new Date(
-                            certificate.eventDate
-                          ).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "long",
-                            year: "numeric",
-                          })}
-                        </p>
-
-                      </div>
-
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-3">
-
-                    <Award
-                      size={19}
-                      className="text-[#145f82]"
-                    />
-
-                    <div>
-
-                      <p className="text-xs font-bold uppercase text-slate-500">
-                        Issued On
-                      </p>
-
-                      <p className="font-semibold">
-                        {certificate.issuedAt
-                          ? new Date(
-                              certificate.issuedAt
-                            ).toLocaleDateString("en-IN", {
-                              day: "numeric",
-                              month: "long",
-                              year: "numeric",
-                            })
-                          : "N/A"}
-                      </p>
-
-                    </div>
-
-                  </div>
-
                 </div>
+
+                <p className="mt-6 text-center text-xs text-slate-500">
+                  This page shows only what is printed on the certificate.
+                  It never reveals contact details or any other record.
+                </p>
               </>
             ) : (
-              <div className="py-8 text-center">
-
+              <div className="py-6 text-center">
                 <XCircle
-                  size={72}
-                  strokeWidth={1.8}
+                  size={68}
+                  strokeWidth={1.6}
                   className="mx-auto text-red-600"
                 />
 
-                <h1 className="mt-5 text-3xl font-black text-black">
-                  Invalid Certificate
+                <h1 className="mt-4 text-3xl font-black text-black">
+                  Not Verified
                 </h1>
 
                 <p className="mx-auto mt-3 max-w-xl text-slate-500">
-                  This certificate does not exist,
-                  has an invalid verification token,
-                  or cannot be verified.
+                  {reason}
                 </p>
 
+                <div className="mx-auto mt-7 flex max-w-md items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left">
+                  <HelpCircle
+                    size={18}
+                    className="mt-0.5 shrink-0 text-slate-400"
+                  />
+
+                  <p className="text-sm text-slate-600">
+                    Certificates are issued by the club that ran the event.
+                    If you believe this one is genuine, ask the organiser to
+                    re-issue it or check that the whole link was copied.
+                  </p>
+                </div>
               </div>
             )}
-
           </div>
         </div>
       </main>

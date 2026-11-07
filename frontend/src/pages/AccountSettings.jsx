@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { authAPI } from '../services/api';
+import {
+  authAPI,
+  certificateAPI,
+  eventAPI,
+  gamificationAPI,
+  notificationAPI
+} from '../services/api';
 import Toast from '../components/Toast';
 import Navbar from "../components/Navbar";
 import LoadingScreen from '../components/LoadingScreen';
+import { useTheme } from '../hooks/useTheme';
 import {
   downscaleImage,
   isSupportedImage,
@@ -19,8 +26,102 @@ import {
   User,
   ShieldCheck,
   Bell,
-  Camera,Mail,Phone,MapPin,CalendarDays,GraduationCap,Building2,Hash,CheckCircle2,Smartphone,BellRing,Megaphone,RotateCcw
+  Camera,Mail,Phone,MapPin,CalendarDays,GraduationCap,Building2,Hash,CheckCircle2,Smartphone,BellRing,Megaphone,RotateCcw,
+  Sun,
+  Moon,
+  Monitor,
+  FileDown,
+  Database
 } from 'lucide-react';
+
+const SECTIONS = [
+  { id: 'profile', label: 'Profile' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'security', label: 'Security' },
+  { id: 'notifications', label: 'Notifications' },
+  { id: 'activity', label: 'Activity' },
+  { id: 'data', label: 'Data & privacy' }
+];
+
+const THEME_OPTIONS = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: Monitor }
+];
+
+const COMPLETENESS_FIELDS = [
+  ['name', 'full name'],
+  ['username', 'username'],
+  ['email', 'email'],
+  ['phone', 'phone number'],
+  ['department', 'department'],
+  ['course', 'course'],
+  ['year', 'year'],
+  ['semester', 'semester'],
+  ['section', 'section'],
+  ['gender', 'gender'],
+  ['dob', 'date of birth'],
+  ['address', 'address'],
+  ['bio', 'bio'],
+  ['profilePic', 'profile photo']
+];
+
+const isEmpty = (value) =>
+  value === undefined ||
+  value === null ||
+  String(value).trim() === '';
+
+// Check-in and verification tokens are capabilities, not personal data: anyone
+// holding one can act for the student, so they never go into a downloadable file.
+const SENSITIVE_KEY = /token|password|secret/i;
+
+const scrub = (value) => {
+  if (Array.isArray(value)) {
+    return value.map(scrub);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.entries(value).reduce((clean, [key, item]) => {
+    if (!SENSITIVE_KEY.test(key)) {
+      clean[key] = scrub(item);
+    }
+
+    return clean;
+  }, {});
+};
+
+// Scoring is deliberately crude: it is a typing aid next to the field, not a
+// policy check. The backend only enforces the minimum length.
+const passwordStrength = (value) => {
+  if (!value) {
+    return { percent: 0, color: 'var(--muted)', label: 'Enter a new password' };
+  }
+
+  let score = 0;
+
+  if (value.length >= 6) score += 1;
+  if (value.length >= 10) score += 1;
+  if (/[a-z]/.test(value) && /[A-Z]/.test(value)) score += 1;
+  if (/\d/.test(value)) score += 1;
+  if (/[^A-Za-z0-9]/.test(value)) score += 1;
+
+  const GRADES = [
+    { color: '#b42318', label: 'Too weak' },
+    { color: '#b42318', label: 'Weak' },
+    { color: '#d97706', label: 'Fair' },
+    { color: '#ca8a04', label: 'Good' },
+    { color: '#157f5b', label: 'Strong' },
+    { color: '#157f5b', label: 'Very strong' }
+  ];
+
+  return {
+    percent: (score / 5) * 100,
+    ...GRADES[score]
+  };
+};
 
 const AccountSettings = () => {
   const [initialUser, setInitialUser] = useState(null);
@@ -28,6 +129,8 @@ const AccountSettings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
+  const [activeSection, setActiveSection] = useState('profile');
+  const [exporting, setExporting] = useState(false);
 
   // Password
   const [currentPwd, setCurrentPwd] = useState('');
@@ -35,6 +138,8 @@ const AccountSettings = () => {
   const [confirmPwd, setConfirmPwd] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [pwdLoading, setPwdLoading] = useState(false);
+
+  const { theme, mode, setThemeMode } = useTheme();
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -201,6 +306,134 @@ const AccountSettings = () => {
     }
   };
 
+  // The section nav follows the page rather than the other way round, so the
+  // highlighted tab stays honest when the reader scrolls by hand.
+  useEffect(() => {
+    if (loading) return;
+
+    const nodes = SECTIONS
+      .map(({ id }) => document.getElementById(id))
+      .filter(Boolean);
+
+    if (!nodes.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+
+        if (visible) {
+          setActiveSection(visible.target.id);
+        }
+      },
+      { rootMargin: '-25% 0px -55% 0px' }
+    );
+
+    nodes.forEach((node) => observer.observe(node));
+
+    return () => observer.disconnect();
+  }, [loading]);
+
+  const scrollToSection = (id) => {
+    document.getElementById(id)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    });
+
+    setActiveSection(id);
+  };
+
+  // Assembled entirely from endpoints the app already calls, so exporting adds
+  // no new server surface and reveals nothing the student cannot already see.
+  const downloadMyData = async () => {
+    setExporting(true);
+
+    const read = (result) =>
+      result.status === 'fulfilled'
+        ? result.value.data?.user ?? result.value.data ?? null
+        : 'Unavailable';
+
+    const [
+      profile,
+      history,
+      certificates,
+      notifications,
+      summary,
+      xpHistory
+    ] = await Promise.allSettled([
+      authAPI.getProfile(),
+      eventAPI.getMyEventHistory(),
+      certificateAPI.getMyCertificates(),
+      notificationAPI.getAllNotifications(),
+      gamificationAPI.getMySummary(),
+      gamificationAPI.getXpHistory({ limit: 200 })
+    ]);
+
+    const bundle = scrub({
+      exportedAt: new Date().toISOString(),
+      account: read(profile),
+      eventHistory: read(history),
+      certificates: read(certificates),
+      notifications: read(notifications),
+      gamification: {
+        standing: read(summary),
+        xpLedger: read(xpHistory)
+      }
+    });
+
+    try {
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(bundle, null, 2)], {
+          type: 'application/json'
+        })
+      );
+
+      const link = document.createElement('a');
+
+      link.href = url;
+      link.download = `campus-clubs-my-data-${new Date()
+        .toISOString()
+        .slice(0, 10)}.json`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+
+      setToast({
+        message: 'Your data has been downloaded',
+        type: 'success'
+      });
+    } catch (error) {
+      setToast({
+        message: 'Your browser blocked the download',
+        type: 'error'
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const missingFields = COMPLETENESS_FIELDS
+    .filter(([field]) => isEmpty(user?.[field]))
+    .map(([, label]) => label);
+
+  const completeness = Math.round(
+    ((COMPLETENESS_FIELDS.length - missingFields.length) /
+      COMPLETENESS_FIELDS.length) *
+      100
+  );
+
+  const isDirty =
+    initialUser !== null &&
+    JSON.stringify(user) !== JSON.stringify(initialUser);
+
+  const strength = passwordStrength(newPwd);
+
+  const passwordMismatch = Boolean(confirmPwd) && confirmPwd !== newPwd;
+
   if (loading) {
     return (
       <LoadingScreen message="Loading account settings..." />
@@ -235,11 +468,8 @@ const AccountSettings = () => {
           </button>
 
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-11 h-11 rounded-xl bg-indigo-100 flex items-center justify-center">
-              <User
-                size={22}
-                className="text-indigo-600"
-              />
+            <div className="settings-tile">
+              <User size={22} />
             </div>
 
             <div>
@@ -253,32 +483,85 @@ const AccountSettings = () => {
             </div>
           </div>
 
+          {/* PROFILE COMPLETENESS */}
+          <div className="app-card mt-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-800">
+                Profile completeness
+              </p>
+
+              <p className="text-sm font-bold text-[#145f82]">
+                {completeness}%
+              </p>
+            </div>
+
+            <div className="xp-track mt-3">
+              <div
+                className="xp-fill"
+                style={{ width: `${completeness}%` }}
+              />
+            </div>
+
+            <p className="mt-3 text-sm text-slate-500">
+              {missingFields.length === 0
+                ? 'Everything is filled in. Your profile is complete.'
+                : `Still missing: ${missingFields
+                    .slice(0, 4)
+                    .join(', ')}${
+                    missingFields.length > 4
+                      ? ` and ${missingFields.length - 4} more`
+                      : ''
+                  }.`}
+            </p>
+          </div>
+
+        </div>
+
+        {/* SECTION NAV */}
+        <div className="settings-nav">
+          <nav aria-label="Settings sections">
+            {SECTIONS.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => scrollToSection(id)}
+                className={
+                  activeSection === id
+                    ? 'jump-link jump-link-active'
+                    : 'jump-link'
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+
+          {isDirty && (
+            <span className="unsaved-chip">
+              Unsaved changes
+            </span>
+          )}
         </div>
 
         {/* =====================================================
             EDIT PROFILE
         ===================================================== */}
-        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-6">
+        <section id="profile" className="settings-section">
 
           {/* Section Header */}
-          <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/70">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
-                <User
-                  size={20}
-                  className="text-indigo-600"
-                />
-              </div>
+          <div className="settings-section-head">
+            <div className="settings-tile">
+              <User size={20} />
+            </div>
 
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Edit Profile
-                </h2>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Edit Profile
+              </h2>
 
-                <p className="text-sm text-slate-500">
-                  Update your personal and academic information
-                </p>
-              </div>
+              <p className="text-sm text-slate-500">
+                Update your personal and academic information
+              </p>
             </div>
           </div>
 
@@ -297,7 +580,7 @@ const AccountSettings = () => {
                   className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md ring-1 ring-slate-200"
                 />
 
-                <div className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-indigo-600 border-2 border-white flex items-center justify-center">
+                <div className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-[#2d7a9b] border-2 border-white flex items-center justify-center">
                   <Camera
                     size={15}
                     className="text-white"
@@ -314,7 +597,7 @@ const AccountSettings = () => {
                   Upload a JPG, PNG or WEBP image.
                 </p>
 
-                <label className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium cursor-pointer hover:bg-indigo-100 transition">
+                <label className="btn-soft cursor-pointer">
                   <Camera size={16} />
                   Choose Image
 
@@ -556,7 +839,7 @@ const AccountSettings = () => {
                     ''
                   }
                   readOnly
-                  className="settings-input-simple bg-slate-100 text-slate-500 cursor-not-allowed"
+                  className="settings-input-simple settings-input-readonly"
                 />
               </div>
 
@@ -669,7 +952,8 @@ const AccountSettings = () => {
               <button
                 type="button"
                 onClick={handleReset}
-                className="inline-flex justify-center items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 font-medium text-sm transition"
+                disabled={!isDirty}
+                className="btn-secondary"
               >
                 <RotateCcw size={16} />
                 Reset
@@ -678,8 +962,8 @@ const AccountSettings = () => {
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={saving}
-                className="inline-flex justify-center items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-medium text-sm transition disabled:opacity-50"
+                disabled={saving || !isDirty}
+                className="btn-primary"
               >
                 {saving ? (
                   <RefreshCw
@@ -699,28 +983,88 @@ const AccountSettings = () => {
         </section>
 
         {/* =====================================================
-            SECURITY
+            APPEARANCE
         ===================================================== */}
-        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-6">
+        <section id="appearance" className="settings-section">
 
-          <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/70">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
-                <ShieldCheck
-                  size={20}
-                  className="text-amber-600"
-                />
-              </div>
+          <div className="settings-section-head">
+            <div className="settings-tile">
+              <Moon size={20} />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Appearance
+              </h2>
+
+              <p className="text-sm text-slate-500">
+                Choose how the app looks on this device
+              </p>
+            </div>
+          </div>
+
+          <div className="p-6">
+
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Security
-                </h2>
+                <h3 className="text-sm font-semibold text-slate-800">
+                  Theme
+                </h3>
 
-                <p className="text-sm text-slate-500">
-                  Protect your account and manage your password
+                <p className="mt-1 text-sm text-slate-500">
+                  {mode === 'system'
+                    ? `Following your device setting, which is currently ${theme}.`
+                    : `Locked to the ${theme} palette.`}
                 </p>
               </div>
+
+              <div className="segmented" role="group" aria-label="Theme">
+                {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={mode === value}
+                    onClick={() => setThemeMode(value)}
+                    className={
+                      mode === value
+                        ? 'segment segment-active'
+                        : 'segment'
+                    }
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+            </div>
+
+            <p className="mt-5 text-xs text-slate-500">
+              The choice is stored on this device only, applies to every page,
+              and matches the toggle in the navigation bar.
+            </p>
+          </div>
+        </section>
+
+        {/* =====================================================
+            SECURITY
+        ===================================================== */}
+        <section id="security" className="settings-section">
+
+          <div className="settings-section-head">
+            <div className="settings-tile">
+              <ShieldCheck size={20} />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Security
+              </h2>
+
+              <p className="text-sm text-slate-500">
+                Protect your account and manage your password
+              </p>
             </div>
           </div>
 
@@ -794,6 +1138,25 @@ const AccountSettings = () => {
                     placeholder="New password"
                   />
                 </div>
+
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="xp-track flex-1">
+                    <div
+                      className="xp-fill"
+                      style={{
+                        width: `${strength.percent}%`,
+                        background: strength.color
+                      }}
+                    />
+                  </div>
+
+                  <span
+                    className="text-xs font-semibold whitespace-nowrap"
+                    style={{ color: strength.color }}
+                  >
+                    {strength.label}
+                  </span>
+                </div>
               </div>
 
               {/* Confirm */}
@@ -821,15 +1184,36 @@ const AccountSettings = () => {
                     placeholder="Confirm password"
                   />
                 </div>
+
+                <p
+                  className={
+                    !confirmPwd
+                      ? 'mt-2 text-xs text-slate-500'
+                      : passwordMismatch
+                        ? 'mt-2 text-xs font-semibold text-red-600'
+                        : 'mt-2 text-xs font-semibold text-green-600'
+                  }
+                >
+                  {!confirmPwd
+                    ? 'Re-type your new password'
+                    : passwordMismatch
+                      ? 'Passwords do not match'
+                      : 'Passwords match'}
+                </p>
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-slate-500">
+                Minimum 6 characters. Mixing upper and lower case letters,
+                numbers and symbols makes it much harder to guess.
+              </p>
+
               <button
                 type="button"
                 onClick={handleChangePassword}
                 disabled={pwdLoading}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 font-medium text-sm transition disabled:opacity-50"
+                className="btn-primary"
               >
                 {pwdLoading ? (
                   <RefreshCw
@@ -851,26 +1235,21 @@ const AccountSettings = () => {
         {/* =====================================================
             NOTIFICATIONS
         ===================================================== */}
-        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-6">
+        <section id="notifications" className="settings-section">
 
-          <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/70">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-                <Bell
-                  size={20}
-                  className="text-blue-600"
-                />
-              </div>
+          <div className="settings-section-head">
+            <div className="settings-tile">
+              <Bell size={20} />
+            </div>
 
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Notifications
-                </h2>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Notifications
+              </h2>
 
-                <p className="text-sm text-slate-500">
-                  Choose how you want to receive updates
-                </p>
-              </div>
+              <p className="text-sm text-slate-500">
+                Choose how you want to receive updates
+              </p>
             </div>
           </div>
 
@@ -947,40 +1326,52 @@ const AccountSettings = () => {
             />
           </div>
 
-          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200">
+          <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-500">
-              Notification preferences are saved when you click
-              <span className="font-medium text-slate-700">
-                {' '}Save Changes
-              </span>
-              {' '}in your profile settings.
+              Preferences are stored with your profile
+              {isDirty ? ' and are not saved yet.' : '.'}
             </p>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !isDirty}
+              className="btn-primary"
+            >
+              {saving ? (
+                <RefreshCw
+                  size={16}
+                  className="animate-spin"
+                />
+              ) : (
+                <Save size={16} />
+              )}
+
+              {saving
+                ? 'Saving...'
+                : 'Save preferences'}
+            </button>
           </div>
         </section>
 
         {/* =====================================================
             MEMBERSHIP ACTIVITY
         ===================================================== */}
-        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <section id="activity" className="settings-section">
 
-          <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/70">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-                <CheckCircle2
-                  size={20}
-                  className="text-emerald-600"
-                />
-              </div>
+          <div className="settings-section-head">
+            <div className="settings-tile">
+              <CheckCircle2 size={20} />
+            </div>
 
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Membership activity
-                </h2>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Membership activity
+              </h2>
 
-                <p className="text-sm text-slate-500">
-                  A summary of your clubs, events and certificates
-                </p>
-              </div>
+              <p className="text-sm text-slate-500">
+                A summary of your clubs, events and certificates
+              </p>
             </div>
           </div>
 
@@ -1048,8 +1439,93 @@ const AccountSettings = () => {
           </div>
         </section>
 
-        {/* Bottom spacing */}
-        <div className="h-8" />
+        {/* =====================================================
+            DATA & PRIVACY
+        ===================================================== */}
+        <section id="data" className="settings-section">
+
+          <div className="settings-section-head">
+            <div className="settings-tile">
+              <FileDown size={20} />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Data &amp; privacy
+              </h2>
+
+              <p className="text-sm text-slate-500">
+                Export the information the platform holds about you
+              </p>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-5">
+
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+              <div className="max-w-xl">
+                <h3 className="text-sm font-semibold text-slate-800">
+                  Download a copy
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  A JSON file containing your profile, event history,
+                  certificates, notifications and XP ledger. It is assembled
+                  in your browser from the same pages you already use, so
+                  nothing new is sent to the server.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={downloadMyData}
+                disabled={exporting}
+                className="btn-secondary shrink-0"
+              >
+
+                {exporting ? (
+                  <RefreshCw
+                    size={16}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <FileDown size={16} />
+                )}
+
+                {exporting
+                  ? 'Preparing...'
+                  : 'Download my data'}
+
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+
+              <div className="flex items-start gap-3">
+
+                <Database
+                  size={17}
+                  className="mt-0.5 shrink-0 text-[#145f82]"
+                />
+
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    What is never included
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-600">
+                    Your password is stored hashed and is never returned by
+                    any endpoint. Check-in and certificate verification
+                    tokens are stripped from the export as well, because
+                    anyone holding one of those can act on your behalf.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
       </div>
 
       {/* =====================================================
@@ -1057,11 +1533,172 @@ const AccountSettings = () => {
       ===================================================== */}
       <style>
         {`
+          /* The page shell and its controls are driven from the app theme
+             variables, so nothing here needs a separate dark override. */
+          .settings-section {
+            margin-bottom: 1.5rem;
+            padding: 0;
+            border: 1px solid var(--line);
+            border-radius: 1rem;
+            background: var(--panel);
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+            scroll-margin-top: 6.5rem;
+          }
+
+          .settings-section-head {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--line);
+            background: var(--soft);
+          }
+
+          .settings-tile {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            width: 2.75rem;
+            height: 2.75rem;
+            border-radius: 0.85rem;
+            background: var(--blue-soft);
+            color: var(--blue-strong);
+          }
+
+          .settings-nav {
+            position: sticky;
+            top: 5.5rem;
+            z-index: 30;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            padding: 0.35rem 0.5rem;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: var(--panel);
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.1);
+          }
+
+          .settings-nav nav {
+            display: flex;
+            flex: 1;
+            gap: 0.25rem;
+            overflow-x: auto;
+            scrollbar-width: none;
+          }
+
+          .settings-nav nav::-webkit-scrollbar {
+            display: none;
+          }
+
+          .jump-link {
+            padding: 0.5rem 0.85rem;
+            border: none;
+            border-radius: 999px;
+            background: transparent;
+            color: var(--muted);
+            font-size: 0.8rem;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+          }
+
+          .jump-link:hover {
+            background: var(--soft);
+            color: var(--ink);
+          }
+
+          .jump-link-active {
+            background: var(--blue-soft);
+            color: var(--blue-strong);
+          }
+
+          .unsaved-chip {
+            flex-shrink: 0;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            background: var(--blue-soft);
+            color: var(--blue-strong);
+            font-size: 0.7rem;
+            font-weight: 700;
+            white-space: nowrap;
+          }
+
+          .segmented {
+            display: inline-flex;
+            gap: 0.25rem;
+            padding: 0.25rem;
+            border: 1px solid var(--line);
+            border-radius: 0.85rem;
+            background: var(--soft);
+          }
+
+          .segment {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 0.9rem;
+            border: none;
+            border-radius: 0.65rem;
+            background: transparent;
+            color: var(--muted);
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+          }
+
+          .segment:hover {
+            color: var(--ink);
+          }
+
+          .segment-active {
+            background: var(--panel);
+            color: var(--ink);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+          }
+
+          .settings-switch {
+            position: relative;
+            flex-shrink: 0;
+            width: 2.75rem;
+            height: 1.5rem;
+            border: none;
+            border-radius: 999px;
+            background: var(--thumb);
+            transition: background-color 0.2s ease;
+          }
+
+          .settings-switch-on {
+            background: var(--blue);
+          }
+
+          .settings-switch-thumb {
+            position: absolute;
+            top: 0.25rem;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 999px;
+            background: #ffffff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+            transition: transform 0.2s ease;
+          }
+
+          .settings-thumb-on {
+            transform: translateX(1.5rem);
+          }
+
+          .settings-thumb-off {
+            transform: translateX(0.25rem);
+          }
+
           .settings-label {
             display: block;
             font-size: 0.875rem;
             font-weight: 600;
-            color: #334155;
+            color: var(--muted);
             margin-bottom: 0.5rem;
           }
 
@@ -1070,31 +1707,36 @@ const AccountSettings = () => {
             border: none;
             outline: none;
             background: transparent;
-            color: #0f172a;
+            color: var(--ink);
             font-size: 0.875rem;
             padding: 0.65rem 0;
           }
 
           .settings-input::placeholder {
-            color: #94a3b8;
+            color: var(--muted);
           }
 
           .settings-input-simple {
             width: 100%;
             min-height: 44px;
             padding: 0.65rem 0.8rem;
-            border: 1px solid #cbd5e1;
+            border: 1px solid var(--line);
             border-radius: 0.625rem;
-            background: white;
-            color: #0f172a;
+            background: var(--soft);
+            color: var(--ink);
             font-size: 0.875rem;
             outline: none;
             transition: all 0.2s ease;
           }
 
           .settings-input-simple:focus {
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(45, 122, 155, 0.15);
+          }
+
+          .settings-input-readonly {
+            color: var(--muted);
+            cursor: not-allowed;
           }
 
           .input-wrapper {
@@ -1103,16 +1745,16 @@ const AccountSettings = () => {
             gap: 0.65rem;
             min-height: 44px;
             padding: 0 0.8rem;
-            border: 1px solid #cbd5e1;
+            border: 1px solid var(--line);
             border-radius: 0.625rem;
-            background: white;
-            color: #94a3b8;
+            background: var(--soft);
+            color: var(--muted);
             transition: all 0.2s ease;
           }
 
           .input-wrapper:focus-within {
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(45, 122, 155, 0.15);
           }
 
           .textarea-wrapper {
@@ -1120,16 +1762,16 @@ const AccountSettings = () => {
             align-items: flex-start;
             gap: 0.65rem;
             padding: 0.75rem 0.8rem;
-            border: 1px solid #cbd5e1;
+            border: 1px solid var(--line);
             border-radius: 0.625rem;
-            background: white;
-            color: #94a3b8;
+            background: var(--soft);
+            color: var(--muted);
             transition: all 0.2s ease;
           }
 
           .textarea-wrapper:focus-within {
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(45, 122, 155, 0.15);
           }
 
           .settings-textarea {
@@ -1139,12 +1781,12 @@ const AccountSettings = () => {
             resize: vertical;
             min-height: 70px;
             background: transparent;
-            color: #0f172a;
+            color: var(--ink);
             font-size: 0.875rem;
           }
 
           .settings-textarea::placeholder {
-            color: #94a3b8;
+            color: var(--muted);
           }
 
           .password-wrapper {
@@ -1153,31 +1795,33 @@ const AccountSettings = () => {
             gap: 0.65rem;
             min-height: 44px;
             padding: 0 0.8rem;
-            border: 1px solid #cbd5e1;
+            border: 1px solid var(--line);
             border-radius: 0.625rem;
-            background: white;
-            color: #94a3b8;
+            background: var(--soft);
+            color: var(--muted);
             transition: all 0.2s ease;
           }
 
           .password-wrapper:focus-within {
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(45, 122, 155, 0.15);
           }
 
           .password-toggle {
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #64748b;
+            color: var(--muted);
             padding: 0.25rem;
+            border: none;
             border-radius: 0.375rem;
+            background: transparent;
             transition: 0.2s ease;
           }
 
           .password-toggle:hover {
-            background: #f1f5f9;
-            color: #334155;
+            background: var(--panel);
+            color: var(--ink);
           }
         `}
       </style>
@@ -1223,25 +1867,20 @@ const NotificationRow = ({
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={title}
         onClick={() => onChange(!checked)}
-        className={`
-          relative shrink-0 w-11 h-6 rounded-full transition-colors duration-200
-          focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
-          ${checked
-            ? 'bg-indigo-600'
-            : 'bg-slate-300'
-          }
-        `}
+        className={
+          checked
+            ? 'settings-switch settings-switch-on'
+            : 'settings-switch'
+        }
       >
         <span
-          className={`
-            absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm
-            transition-transform duration-200
-            ${checked
-              ? 'translate-x-6'
-              : 'translate-x-1'
-            }
-          `}
+          className={
+            checked
+              ? 'settings-switch-thumb settings-thumb-on'
+              : 'settings-switch-thumb settings-thumb-off'
+          }
         />
       </button>
     </div>
