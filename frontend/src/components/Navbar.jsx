@@ -370,6 +370,7 @@ const Navbar = () => {
         { to: '/clubs', label: 'Clubs' },
         { to: '/events', label: 'Events' },
         { to: '/calendar', label: 'Calendar' },
+        { to: '/leaderboard', label: 'Leaderboard' },
           ...(user?.role === 'admin'
             ? [
                 { to: '/admin', label: 'Admin'}

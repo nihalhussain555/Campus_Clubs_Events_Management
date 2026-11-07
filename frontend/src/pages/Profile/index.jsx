@@ -3,15 +3,25 @@ import {
   Activity,
   Award,
   Calendar,
+  CalendarCheck,
   CalendarDays,
   CheckCircle2,
+  ClipboardList,
   Clock3,
+  Compass,
+  Crown,
   Edit3,
+  Flame,
   GraduationCap,
+  HeartHandshake,
+  Lock,
   Mail,
   MapPin,
+  Medal,
   Phone,
   School,
+  Sparkles,
+  Trophy,
   User,
   Users,
   XCircle,
@@ -20,8 +30,13 @@ import {
 import Navbar from '../../components/Navbar';
 import LoadingScreen from '../../components/LoadingScreen';
 import Toast from '../../components/Toast';
+import { Skeleton } from '../../components/Skeleton';
 
-import { authAPI, eventAPI } from '../../services/api';
+import {
+  authAPI,
+  eventAPI,
+  gamificationAPI
+} from '../../services/api';
 import { statusLabel as getEventStatus } from '../../utils/eventStatus';
 import EditProfileModal from './components/EditProfileModal';
 
@@ -31,6 +46,8 @@ const ProfilePage = () => {
   const [toast, setToast] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [events, setEvents] = useState([]);
+  const [game, setGame] = useState(null);
+  const [gameLoaded, setGameLoaded] = useState(false);
 
   const [user, setUser] = useState({
     name: '',
@@ -122,12 +139,33 @@ const ProfilePage = () => {
   };
 
   // ============================================================
+  // FETCH GAMIFICATION
+  // ============================================================
+
+  const fetchGamification = async () => {
+    try {
+      const response = await gamificationAPI.getMySummary();
+
+      setGame(response.data);
+    } catch (error) {
+      console.error('Gamification loading error:', error);
+
+      // The profile still works without the score card, so this is logged
+      // rather than raised as a toast.
+      setGame(null);
+    } finally {
+      setGameLoaded(true);
+    }
+  };
+
+  // ============================================================
   // INITIAL LOAD
   // ============================================================
 
   useEffect(() => {
     fetchUserProfile();
     fetchEvents();
+    fetchGamification();
   }, []);
 
   // ============================================================
@@ -226,7 +264,7 @@ const ProfilePage = () => {
   // ACHIEVEMENTS
   // ============================================================
 
-  const achievements = completedEvents.length > 0 ? 1 : 0;
+  const earnedBadges = game?.badges?.filter((badge) => badge.earned) || [];
 
   // ============================================================
   // PROFILE SAVE
@@ -536,11 +574,45 @@ const ProfilePage = () => {
 
             <StatCard
               icon={<Award size={18} />}
-              value={achievements}
-              label="Achievements"
+              value={game ? `${earnedBadges.length}/${game.badges.length}` : '-'}
+              label="Badges Earned"
               iconClass="bg-amber-50 text-amber-600"
             />
 
+          </section>
+
+          {/* ==================================================
+              XP AND BADGES
+          ================================================== */}
+
+          <section className="mt-6">
+            {!gameLoaded ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <Skeleton className="mb-4 h-5 w-48" />
+                <Skeleton className="mb-3 h-3 w-full" />
+                <Skeleton className="mb-3 h-3 w-5/6" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+            ) : game ? (
+              <GamificationCard game={game} formatDate={formatDate} />
+            ) : (
+              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+                  <Trophy size={17} />
+                </div>
+
+                <div>
+                  <p className="text-sm font-black text-slate-900">
+                    Score card unavailable
+                  </p>
+
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Your profile is intact — reload the page to try fetching
+                    your XP and badges again.
+                  </p>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* ==================================================
@@ -991,6 +1063,405 @@ const StatCard = ({
         </div>
 
       </div>
+
+    </div>
+  );
+};
+
+/* ================================================================
+   GAMIFICATION CARD
+================================================================ */
+
+const XP_TYPE_LABELS = {
+  event_attendance: 'Event attendance',
+  competition_participation: 'Competition entry',
+  competition_win: 'Competition win',
+  volunteering: 'Volunteering',
+  event_organizing: 'Event organizing',
+  workshop_completion: 'Workshop completion',
+  achievement_bonus: 'Badge bonus',
+  manual_adjustment: 'Admin adjustment',
+};
+
+const RANK_WINDOWS = [
+  { key: 'overall', label: 'All time' },
+  { key: 'weekly', label: 'This week' },
+  { key: 'monthly', label: 'This month' },
+  { key: 'semester', label: 'Semester' },
+];
+
+const PERFORMANCE_STATS = [
+  { key: 'eventsAttended', label: 'Events' },
+  { key: 'competitionEntries', label: 'Entries' },
+  { key: 'competitionWins', label: 'Wins' },
+  { key: 'volunteerCredits', label: 'Volunteer' },
+  { key: 'eventsOrganized', label: 'Organized' },
+  { key: 'activeWeeks', label: 'Active weeks' },
+];
+
+const BADGE_ICONS = {
+  Sparkles,
+  Compass,
+  CalendarCheck,
+  HeartHandshake,
+  ClipboardList,
+  Trophy,
+  Users,
+  Crown,
+};
+
+const GamificationCard = ({ game, formatDate }) => {
+  const level = game?.xp?.level || {};
+  const ranks = game?.ranks || {};
+  const metrics = game?.metrics || {};
+  const badges = game?.badges || [];
+  const next = game?.nextAchievement || null;
+
+  const earnedBadges = badges.filter((badge) => badge.earned);
+  const activity = (game?.recentActivity || []).slice(0, 6);
+
+  const summary = [
+    {
+      icon: <Flame size={16} />,
+      label: 'Total XP',
+      value: (game?.xp?.total ?? 0).toLocaleString(),
+    },
+    {
+      icon: <Award size={16} />,
+      label: 'Level',
+      value: level.level ? `${level.level} · ${level.title}` : '-',
+    },
+    {
+      icon: <Medal size={16} />,
+      label: 'Overall rank',
+      value: ranks.overall ? `#${ranks.overall}` : 'Unranked',
+    },
+    {
+      icon: <Sparkles size={16} />,
+      label: 'Badges',
+      value: `${earnedBadges.length}/${badges.length}`,
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+
+      <SectionHeading
+        icon={<Trophy size={17} />}
+        title="XP and Badges"
+        subtitle="Calculated from your verified campus activity"
+      />
+
+      {/* HEADLINE NUMBERS */}
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+
+        {summary.map((item) => (
+          <div
+            key={item.label}
+            className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3"
+          >
+
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-indigo-600 shadow-sm">
+              {item.icon}
+            </div>
+
+            <div className="min-w-0">
+              <p className="truncate text-base font-black text-slate-900">
+                {item.value}
+              </p>
+
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                {item.label}
+              </p>
+            </div>
+
+          </div>
+        ))}
+
+      </div>
+
+      {/* LEVEL PROGRESS */}
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500">
+
+          <span>
+            Level {level.level || 1} · {level.title || 'Freshface'}
+          </span>
+
+          <span className="text-slate-400">
+            {level.maxLevel
+              ? 'Highest level reached'
+              : `${level.xpIntoLevel || 0} / ${level.xpForNextLevel || 0} XP in this level`}
+          </span>
+
+        </div>
+
+        <div className="xp-track mt-3">
+          <div
+            className="xp-fill"
+            style={{ width: `${level.progressPercent || 0}%` }}
+          />
+        </div>
+
+      </div>
+
+      {/* RANK PER WINDOW */}
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+
+        {RANK_WINDOWS.map((entry) => (
+          <div
+            key={entry.key}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center"
+          >
+
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+              {entry.label}
+            </p>
+
+            <p className="mt-1 text-lg font-black text-slate-900">
+              {ranks[entry.key] ? `#${ranks[entry.key]}` : '—'}
+            </p>
+
+          </div>
+        ))}
+
+      </div>
+
+      {/* NEXT ACHIEVEMENT */}
+      {next && (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-indigo-50 p-4">
+
+          <div className="flex items-start gap-3">
+
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-indigo-600 shadow-sm">
+              <Sparkles size={16} />
+            </div>
+
+            <div className="min-w-0 flex-1">
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+
+                <p className="text-sm font-black text-slate-900">
+                  Next to unlock · {next.title}
+                </p>
+
+                <span className="chip">
+                  {next.progressPercent}%
+                </span>
+
+              </div>
+
+              <p className="mt-1 text-xs leading-5 text-slate-600">
+                {next.description}
+              </p>
+
+              <div className="xp-track mt-3">
+                <div
+                  className="xp-fill"
+                  style={{ width: `${next.progressPercent || 0}%` }}
+                />
+              </div>
+
+              <p className="mt-2 text-[11px] font-semibold text-slate-500">
+                {`${next.value} of ${next.threshold}`}
+                {next.metric === 'totalXp' ? ' XP' : ''}
+                {` · ${next.xpBonus} XP bonus on completion`}
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* BADGES */}
+      <section className="mt-6">
+
+        <div className="flex items-center gap-2">
+
+          <Medal size={15} className="text-indigo-600" />
+
+          <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">
+            Badges
+          </h3>
+
+        </div>
+
+        {badges.length === 0 ? (
+          <p className="mt-3 text-xs text-slate-500">
+            No badges are configured yet.
+          </p>
+        ) : (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
+            {badges.map((badge) => {
+
+              const BadgeIcon = BADGE_ICONS[badge.icon] || Award;
+
+              return (
+                <div
+                  key={badge.slug}
+                  className={`rounded-xl border border-slate-200 p-3 ${
+                    badge.earned ? 'bg-white' : 'bg-slate-50'
+                  }`}
+                >
+
+                  <div className="flex items-center gap-2">
+
+                    <div
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                        badge.earned
+                          ? 'bg-indigo-50 text-indigo-600'
+                          : 'bg-slate-100 text-slate-400'
+                      }`}
+                    >
+                      {badge.earned ? (
+                        <BadgeIcon size={15} />
+                      ) : (
+                        <Lock size={14} />
+                      )}
+                    </div>
+
+                    <p className="min-w-0 flex-1 truncate text-xs font-black text-slate-800">
+                      {badge.title}
+                    </p>
+
+                  </div>
+
+                  <p className="mt-2 line-clamp-2 min-h-8 text-[11px] leading-4 text-slate-500">
+                    {badge.description}
+                  </p>
+
+                  {badge.earned ? (
+                    <p className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-green-600">
+                      <CheckCircle2 size={12} />
+                      {`Earned ${formatDate(badge.earnedAt)}`}
+                    </p>
+                  ) : (
+                    <>
+                      <div className="xp-track mt-1.5">
+                        <div
+                          className="xp-fill"
+                          style={{ width: `${badge.progressPercent || 0}%` }}
+                        />
+                      </div>
+
+                      <p className="mt-1.5 text-[10px] font-semibold text-slate-400">
+                        {`${badge.value} of ${badge.threshold}`}
+                        {badge.metric === 'totalXp' ? ' XP' : ''}
+                      </p>
+                    </>
+                  )}
+
+                </div>
+              );
+            })}
+
+          </div>
+        )}
+
+      </section>
+
+      {/* RECENT ACTIVITY */}
+      <section className="mt-6">
+
+        <div className="flex items-center gap-2">
+
+          <Activity size={15} className="text-indigo-600" />
+
+          <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">
+            Recent activity
+          </h3>
+
+        </div>
+
+        {activity.length === 0 ? (
+          <p className="mt-3 text-xs text-slate-500">
+            Nothing recorded yet. Check in to an event with your QR code to
+            earn your first XP.
+          </p>
+        ) : (
+          <ul className="mt-2 divide-y divide-slate-100">
+
+            {activity.map((row) => (
+
+              <li
+                key={row._id}
+                className="flex items-start justify-between gap-3 py-2.5"
+              >
+
+                <div className="min-w-0">
+
+                  <p className="truncate text-xs font-bold text-slate-700">
+                    {row.reason || XP_TYPE_LABELS[row.type] || 'XP adjustment'}
+                  </p>
+
+                  <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                    {row.event?.title ||
+                      row.club?.clubName ||
+                      XP_TYPE_LABELS[row.type] ||
+                      'Campus activity'}
+                  </p>
+
+                  <p className="mt-0.5 text-[10px] font-medium text-slate-400">
+                    {formatDate(row.createdAt)}
+                  </p>
+
+                </div>
+
+                <span
+                  className={`shrink-0 text-sm font-black ${
+                    row.amount >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}
+                >
+                  {`${row.amount >= 0 ? '+' : ''}${row.amount}`}
+                </span>
+
+              </li>
+            ))}
+
+          </ul>
+        )}
+
+      </section>
+
+      {/* PERSONAL PERFORMANCE */}
+      <section className="mt-6">
+
+        <div className="flex items-center gap-2">
+
+          <GraduationCap size={15} className="text-indigo-600" />
+
+          <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">
+            Performance
+          </h3>
+
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-3 lg:grid-cols-6">
+
+          {PERFORMANCE_STATS.map((stat) => (
+            <div
+              key={stat.key}
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-center"
+            >
+
+              <p className="text-lg font-black text-slate-900">
+                {metrics[stat.key] ?? 0}
+              </p>
+
+              <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                {stat.label}
+              </p>
+
+            </div>
+          ))}
+
+        </div>
+
+      </section>
 
     </div>
   );

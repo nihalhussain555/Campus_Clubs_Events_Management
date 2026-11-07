@@ -30,6 +30,7 @@ const notificationSchema = new mongoose.Schema(
         'event',
         'club',
         'alert',
+        'achievement',
         'info'
       ],
       default: 'info'

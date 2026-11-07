@@ -23,6 +23,7 @@ import EventCheckInDesk from '../components/EventCheckInDesk';
 
 import { clubAPI, eventAPI } from '../services/api';
 import { statusLabel as getEventStatus } from '../utils/eventStatus';
+import { ACTIVITY_OPTIONS } from '../utils/activityTypes';
 
 
 const Events = () => {
@@ -89,6 +90,7 @@ const Events = () => {
     location: '',
     category: 'General',
     club: '',
+    activityType: 'event',
     capacity: 120
   });
 
@@ -429,6 +431,7 @@ const Events = () => {
           location: '',
           category: 'General',
           club: '',
+          activityType: 'event',
           capacity: 120
         });
 
@@ -1035,6 +1038,39 @@ const Events = () => {
                     />
 
                   </div>
+
+                </div>
+
+
+                <div>
+
+                  <label className="field-label">
+                    Activity type
+                  </label>
+
+                  <select
+                    value={formData.activityType}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        activityType: e.target.value
+                      })
+                    }
+                    className="field"
+                  >
+                    {ACTIVITY_OPTIONS.map((option) => (
+                      <option
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {`${option.label} — ${option.xp} XP per verified attendee`}
+                      </option>
+                    ))}
+                  </select>
+
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    Decides which XP a verified check-in pays.
+                  </p>
 
                 </div>
 

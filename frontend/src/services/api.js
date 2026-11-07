@@ -313,4 +313,69 @@ export const agentAPI = {
     }),
 };
 
+// =====================================================
+// GAMIFICATION API
+// =====================================================
+
+// Rankings, XP and badges. Every call here is authenticated by the interceptor
+// above; the board shows student names, so nothing on it is public.
+export const gamificationAPI = {
+  // Published XP rates, level curve, periods and the badge catalog.
+  getRules: () => api.get('/gamification/rules'),
+
+  // { period, semester, department, search, page, limit }
+  getStudentLeaderboard: (params) =>
+    api.get('/gamification/students', { params }),
+
+  getClubLeaderboard: (params) =>
+    api.get('/gamification/clubs', { params }),
+
+  getClubStanding: (clubId, params) =>
+    api.get(`/gamification/clubs/${clubId}`, { params }),
+
+  // The signed-in student's own score, rank, level and badges.
+  getMySummary: () => api.get('/gamification/students/me'),
+
+  getXpHistory: (params) => api.get('/gamification/xp/history', { params }),
+
+  getAchievements: (userId) =>
+    api.get('/gamification/achievements', { params: { userId } }),
+
+  // ---- awarding (admin, or a club leader on an event they run)
+
+  award: (payload) => api.post('/gamification/awards', payload),
+
+  reverseAward: (transactionId, reason) =>
+    api.delete(`/gamification/awards/${transactionId}`, {
+      data: { reason }
+    }),
+
+  recordWinners: (eventId, userIds) =>
+    api.post(`/gamification/events/${eventId}/winners`, { userIds }),
+
+  creditOrganizers: (eventId, userIds) =>
+    api.post(`/gamification/events/${eventId}/organizer-credit`, {
+      userIds
+    }),
+
+  // ---- admin
+
+  getAnalytics: () => api.get('/gamification/analytics'),
+
+  getSuspicious: () => api.get('/gamification/suspicious'),
+
+  getXpTotals: (params) => api.get('/gamification/xp-totals', { params }),
+
+  recompute: (payload) => api.post('/gamification/recompute', payload),
+
+  createAchievement: (payload) => api.post('/gamification/achievements', payload),
+
+  updateAchievement: (id, payload) =>
+    api.put(`/gamification/achievements/${id}`, payload),
+
+  // Downloads as a file, so the body has to come back as a blob.
+  exportCsv: (params) =>
+    api.get('/gamification/export', { params, responseType: 'blob' })
+};
+
 export default api;

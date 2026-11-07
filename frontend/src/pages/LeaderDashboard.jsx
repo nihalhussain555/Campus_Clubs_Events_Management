@@ -4,9 +4,12 @@ import {
   CheckCircle2,
   ClipboardList,
   Mail,
+  Medal,
   Pencil,
   Plus,
+  Sparkles,
   Trash2,
+  Trophy,
   Users,
   X
 } from 'lucide-react';
@@ -18,8 +21,13 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import SkeletonGrid from '../components/Skeleton';
 import EventCheckInDesk from '../components/EventCheckInDesk';
 
-import { clubAPI, eventAPI } from '../services/api';
+import { clubAPI, eventAPI, gamificationAPI } from '../services/api';
 import { statusLabel as statusOf } from '../utils/eventStatus';
+import {
+  ACTIVITY_OPTIONS,
+  activityLabel,
+  activityXp
+} from '../utils/activityTypes';
 
 const EMPTY_FORM = {
   title: '',
@@ -29,7 +37,8 @@ const EMPTY_FORM = {
   location: '',
   category: 'General',
   capacity: 100,
-  club: ''
+  club: '',
+  activityType: 'event'
 };
 
 const pad = (part) => String(part).padStart(2, '0');
@@ -70,6 +79,11 @@ const LeaderDashboard = () => {
   });
   const [clubSaving, setClubSaving] = useState(false);
 
+  // Club leaderboard standings, winners selection and credit submission
+  const [standings, setStandings] = useState({});
+  const [winnerIds, setWinnerIds] = useState([]);
+  const [crediting, setCrediting] = useState(false);
+
   const load = async () => {
     try {
       const clubsResponse = await clubAPI.getAllClubs();
@@ -96,6 +110,20 @@ const LeaderDashboard = () => {
           .flat()
           .sort((a, b) => new Date(a.date) - new Date(b.date))
       );
+
+      // A club that has not scored yet still has a standing (rank null, zero
+      // XP), so a failed read here is a real fault worth staying silent about
+      // rather than blocking the whole dashboard.
+      const standingEntries = await Promise.all(
+        mine.map((club) =>
+          gamificationAPI
+            .getClubStanding(club._id, { period: 'overall' })
+            .then((res) => [club._id, res.data])
+            .catch(() => null)
+        )
+      );
+
+      setStandings(Object.fromEntries(standingEntries.filter(Boolean)));
     } catch (error) {
       setToast({
         message:
@@ -146,6 +174,7 @@ const LeaderDashboard = () => {
       location: event.location || '',
       category: event.category || 'General',
       capacity: event.capacity ?? 100,
+      activityType: event.activityType || 'event',
       club: event?.club?._id || event?.club || ''
     });
     setEditingEvent(event);
@@ -259,6 +288,83 @@ const LeaderDashboard = () => {
         type: 'error'
       });
     }
+  };
+
+  // --------------------------------------------------
+  // GAMIFICATION
+  // --------------------------------------------------
+
+  const toggleWinner = (studentId) => {
+    setWinnerIds((prev) =>
+      prev.includes(studentId)
+        ? prev.filter((id) => id !== studentId)
+        : [...prev, studentId]
+    );
+  };
+
+  const submitWinners = async (event) => {
+    try {
+      setCrediting(true);
+
+      const response = await gamificationAPI.recordWinners(
+        event._id,
+        winnerIds
+      );
+
+      setToast({
+        message: response.data?.message || 'Results recorded',
+        type: 'success'
+      });
+
+      setWinnerIds([]);
+      await load();
+    } catch (error) {
+      setToast({
+        message:
+          error.response?.data?.message || 'Unable to record the results',
+        type: 'error'
+      });
+    } finally {
+      setCrediting(false);
+    }
+  };
+
+  const requestOrganizerCredit = (event) => {
+    setPendingAction({
+      title: `Credit the organisers of ${event.title}?`,
+      message:
+        'You and anyone you named as a co-organiser earn the organising rate ' +
+        'for this event. The credit is booked once per event, so pressing ' +
+        'this twice changes nothing.',
+      confirmLabel: 'Credit organisers',
+      tone: 'primary',
+      run: async () => {
+        try {
+          setCrediting(true);
+
+          const response = await gamificationAPI.creditOrganizers(
+            event._id,
+            []
+          );
+
+          setToast({
+            message: response.data?.message || 'Organisers credited',
+            type: 'success'
+          });
+
+          await load();
+        } catch (error) {
+          setToast({
+            message:
+              error.response?.data?.message ||
+              'Unable to credit the organisers',
+            type: 'error'
+          });
+        } finally {
+          setCrediting(false);
+        }
+      }
+    });
   };
 
   const requestTransfer = (club, member) => {
@@ -396,7 +502,10 @@ const LeaderDashboard = () => {
                     Clubs you manage
                   </h2>
 
-                  {clubs.map((club) => (
+                  {clubs.map((club) => {
+                    const standing = standings[club._id];
+
+                    return (
                     <article key={club._id} className="app-card">
                       <h3 className="text-xl font-black text-black">
                         {club.clubName}
@@ -495,6 +604,67 @@ const LeaderDashboard = () => {
                       )}
 
                       <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+
+                          <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                            <Trophy size={14} className="text-[#145f82]" />
+                            Club leaderboard standing
+                          </p>
+
+                          <span className="chip">
+                            {standing?.rank
+                              ? `#${standing.rank} of ${standing.rankedClubs}`
+                              : `Unranked of ${standing?.rankedClubs || 0}`}
+                          </span>
+
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                          {[
+                            { label: 'Club score', value: standing?.totalXp ?? 0 },
+                            {
+                              label: 'Verified participants',
+                              value: standing?.participation ?? 0
+                            },
+                            {
+                              label: 'Events hosted',
+                              value: standing?.eventsOrganized ?? 0
+                            },
+                            {
+                              label: 'Sessions credited',
+                              value: standing?.attendanceSessions ?? 0
+                            }
+                          ].map((item) => (
+                            <div
+                              key={item.label}
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5"
+                            >
+                              <p className="text-lg font-black text-[#073c57]">
+                                {item.value}
+                              </p>
+
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                {item.label}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {standing?.topContributors?.length ? (
+                          <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-600">
+                            <Medal size={14} className="text-[#145f82]" />
+                            {`Top contributor: ${standing.topContributors[0].name} with ${standing.topContributors[0].totalXp} XP`}
+                          </p>
+                        ) : (
+                          <p className="mt-3 text-xs text-slate-500">
+                            No XP has been credited through this club yet.
+                          </p>
+                        )}
+
+                      </div>
+
+                      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                         <p className="mb-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
                           Hand the club to another member
                         </p>
@@ -528,7 +698,8 @@ const LeaderDashboard = () => {
                         </select>
                       </div>
                     </article>
-                  ))}
+                    );
+                  })}
                 </section>
 
                 {formMode && (
@@ -638,6 +809,30 @@ const LeaderDashboard = () => {
                       </div>
                     </div>
 
+                    <div>
+                      <label className="field-label">Activity type</label>
+
+                      <select
+                        value={form.activityType}
+                        onChange={(e) =>
+                          setForm({ ...form, activityType: e.target.value })
+                        }
+                        className="field"
+                      >
+                        {ACTIVITY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {`${option.label} — ${option.xp} XP per verified attendee`}
+                          </option>
+                        ))}
+                      </select>
+
+                      <p className="mt-2 text-xs text-slate-500">
+                        The activity type decides what a verified check-in is
+                        worth. Competition winners are credited on top of it,
+                        once per event.
+                      </p>
+                    </div>
+
                     <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row">
                       <button
                         type="button"
@@ -704,6 +899,8 @@ const LeaderDashboard = () => {
                                 })}
                                 {' · '}
                                 {event.location || 'TBD'}
+                                {' · '}
+                                {activityLabel(event.activityType)}
                               </p>
                             </div>
 
@@ -724,15 +921,28 @@ const LeaderDashboard = () => {
 
                             <button
                               type="button"
-                              onClick={() =>
+                              onClick={() => {
                                 setRosterEventId(
-                                  rosterEventId === event._id ? null : event._id
-                                )
-                              }
+                                  rosterEventId === event._id
+                                    ? null
+                                    : event._id
+                                );
+                                setWinnerIds([]);
+                              }}
                               className="btn-soft"
                             >
                               <Users size={17} />
                               Roster
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => requestOrganizerCredit(event)}
+                              disabled={crediting}
+                              className="btn-soft"
+                            >
+                              <Trophy size={17} />
+                              Credit organisers
                             </button>
 
                             <button
@@ -756,7 +966,7 @@ const LeaderDashboard = () => {
                           {rosterEventId === event._id && (
                             <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
                               <p className="table-head bg-slate-50 px-5 py-3 text-sm">
-                                Registered students
+                                {`Registered students · ${activityLabel(event.activityType)} · ${activityXp(event.activityType)} XP per verified attendee`}
                               </p>
 
                               {registered.length === 0 ? (
@@ -764,58 +974,122 @@ const LeaderDashboard = () => {
                                   Nobody has registered yet.
                                 </p>
                               ) : (
-                                registered.map((student) => {
-                                  const present = presentIds.includes(
-                                    String(student?._id || student)
-                                  );
+                                <>
+                                  {registered.map((student) => {
+                                    const studentId = String(
+                                      student?._id || student
+                                    );
 
-                                  return (
-                                    <div
-                                      key={student?._id || student}
-                                      className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-                                    >
-                                      <div>
-                                        <p className="text-sm font-bold text-black">
-                                          {student?.name || 'Student'}
-                                        </p>
+                                    const present =
+                                      presentIds.includes(studentId);
 
-                                        <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-                                          <Mail size={13} />
-                                          {student?.email}
-                                        </p>
-                                      </div>
+                                    const isWinner =
+                                      winnerIds.includes(studentId);
 
-                                      {present ? (
-                                        <div className="flex items-center gap-3">
-                                          <span className="flex items-center gap-1.5 text-sm font-bold text-green-700">
-                                            <CheckCircle2 size={17} />
-                                            Present
-                                          </span>
+                                    return (
+                                      <div
+                                        key={studentId}
+                                        className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+                                      >
+                                        <div>
+                                          <p className="text-sm font-bold text-black">
+                                            {student?.name || 'Student'}
+                                          </p>
 
+                                          <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+                                            <Mail size={13} />
+                                            {student?.email}
+                                          </p>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2">
                                           <button
                                             type="button"
                                             onClick={() =>
-                                              removePresent(event._id, student._id)
+                                              toggleWinner(studentId)
                                             }
-                                            className="btn-secondary px-3 py-1.5 text-xs"
+                                            className={
+                                              isWinner
+                                                ? 'btn-primary px-3 py-1.5 text-xs'
+                                                : 'btn-secondary px-3 py-1.5 text-xs'
+                                            }
                                           >
-                                            Undo
+                                            <Sparkles size={14} />
+                                            {isWinner
+                                              ? 'Winner selected'
+                                              : 'Mark winner'}
                                           </button>
+
+                                          {present ? (
+                                            <div className="flex items-center gap-3">
+                                              <span className="flex items-center gap-1.5 text-sm font-bold text-green-700">
+                                                <CheckCircle2 size={17} />
+                                                Present
+                                              </span>
+
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  removePresent(
+                                                    event._id,
+                                                    studentId
+                                                  )
+                                                }
+                                                className="btn-secondary px-3 py-1.5 text-xs"
+                                              >
+                                                Undo
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                markPresent(
+                                                  event._id,
+                                                  studentId
+                                                )
+                                              }
+                                              className="btn-success px-4 py-2 text-xs"
+                                            >
+                                              Mark present
+                                            </button>
+                                          )}
                                         </div>
-                                      ) : (
+                                      </div>
+                                    );
+                                  })}
+
+                                  <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <p className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                                      <Trophy size={16} className="text-[#145f82]" />
+                                      {winnerIds.length
+                                        ? `${winnerIds.length} winner(s) selected · 50 XP each`
+                                        : 'Select the winners to credit them with 50 XP'}
+                                    </p>
+
+                                    <div className="flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        disabled={!winnerIds.length || crediting}
+                                        onClick={() => submitWinners(event)}
+                                        className="btn-primary px-3 py-1.5 text-xs"
+                                      >
+                                        <Trophy size={14} />
+                                        Record results
+                                      </button>
+
+                                      {!!winnerIds.length && (
                                         <button
                                           type="button"
-                                          onClick={() =>
-                                            markPresent(event._id, student._id)
-                                          }
-                                          className="btn-success px-4 py-2 text-xs"
+                                          onClick={() => setWinnerIds([])}
+                                          className="btn-secondary px-3 py-1.5 text-xs"
                                         >
-                                          Mark present
+                                          Clear
                                         </button>
                                       )}
                                     </div>
-                                  );
-                                })
+                                  </div>
+                                </>
                               )}
                             </div>
                           )}

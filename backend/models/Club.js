@@ -15,6 +15,12 @@ const clubSchema = new mongoose.Schema({
     default: 'General',
     trim: true
   },
+
+  // Optional branding for the club leaderboard. Older records simply render
+  // their initials, so nothing needs migrating.
+  logo: { type: String, trim: true },
+
+  department: { type: String, trim: true },
   members: [
     {
       type: mongoose.Schema.Types.ObjectId,

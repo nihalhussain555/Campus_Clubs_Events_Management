@@ -1,18 +1,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Activity,
+  AlertTriangle,
   Bell,
   Briefcase,
   Calendar,
   CheckCircle2,
   ChevronRight,
   Clock,
+  Download,
   MapPin,
+  Medal,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Shield,
   Trash2,
+  Trophy,
+  Undo2,
   Users,
   X,
 } from 'lucide-react';
@@ -22,6 +29,7 @@ import {
   authAPI,
   clubAPI,
   eventAPI,
+  gamificationAPI,
   notificationAPI,
 } from '../services/api';
 import LoadingScreen from '../components/LoadingScreen';
@@ -29,6 +37,58 @@ import Toast from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import AnalyticsCharts from '../components/AnalyticsCharts';
 import { getEventStatus } from '../utils/eventStatus';
+import { ACTIVITY_OPTIONS } from '../utils/activityTypes';
+
+const XP_TYPE_LABELS = {
+  event_attendance: 'Event attendance',
+  competition_participation: 'Competition entry',
+  competition_win: 'Competition win',
+  volunteering: 'Volunteering',
+  event_organizing: 'Event organizing',
+  workshop_completion: 'Workshop completion',
+  achievement_bonus: 'Badge bonus',
+  manual_adjustment: 'Manual adjustment',
+};
+
+const METRIC_LABELS = {
+  eventsAttended: 'Events attended',
+  activeWeeks: 'Active weeks',
+  competitionEntries: 'Competition entries',
+  competitionWins: 'Competition wins',
+  volunteerCredits: 'Volunteer credits',
+  eventsOrganized: 'Events organized',
+  clubsLed: 'Clubs led',
+  totalXp: 'Total XP',
+  badgesEarned: 'Badges earned',
+};
+
+const AWARD_TYPE_ORDER = [
+  'manual_adjustment',
+  'competition_win',
+  'volunteering',
+  'event_organizing',
+  'workshop_completion',
+  'event_attendance',
+  'competition_participation',
+];
+
+const ADMIN_ROLES = ['student', 'club_member'];
+
+// A blob request that fails still carries the JSON error body, and the reason
+// for the failure is the only thing the admin can act on.
+const blobErrorMessage = async (error, fallback) => {
+  const data = error.response?.data;
+
+  if (data instanceof Blob) {
+    try {
+      return JSON.parse(await data.text()).message || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  return data?.message || fallback;
+};
 
 const AdminPanel = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -64,6 +124,7 @@ const AdminPanel = () => {
     club: '',
     capacity: 100,
     category: 'General',
+    activityType: 'event',
   });
 
   const [newNotification, setNewNotification] = useState({
@@ -71,6 +132,50 @@ const AdminPanel = () => {
     message: '',
     type: 'info',
   });
+
+  // --------------------------------------------------
+  // GAMIFICATION
+  // --------------------------------------------------
+
+  const [game, setGame] = useState(null);
+  const [gameLoading, setGameLoading] = useState(false);
+
+  const [awardForm, setAwardForm] = useState({
+    userId: '',
+    type: 'manual_adjustment',
+    amount: '',
+    reason: '',
+  });
+
+  const [awardBusy, setAwardBusy] = useState(false);
+  const [awardResult, setAwardResult] = useState(null);
+  const [studentQuery, setStudentQuery] = useState('');
+
+  const [ledger, setLedger] = useState(null);
+  const [ledgerBusy, setLedgerBusy] = useState(false);
+
+  const [badgeForm, setBadgeForm] = useState({
+    slug: '',
+    title: '',
+    description: '',
+    icon: 'Award',
+    metric: 'eventsAttended',
+    threshold: '',
+    xpBonus: '',
+  });
+
+  const [showBadgeForm, setShowBadgeForm] = useState(false);
+  const [badgeEdits, setBadgeEdits] = useState({});
+
+  const [reportForm, setReportForm] = useState({
+    scope: 'students',
+    period: 'overall',
+    semester: '',
+  });
+
+  const [reportBusy, setReportBusy] = useState(false);
+  const [recomputeBusy, setRecomputeBusy] = useState(false);
+  const [lastRecompute, setLastRecompute] = useState(null);
 
   // --------------------------------------------------
   // FETCH DATA
@@ -118,6 +223,363 @@ const AdminPanel = () => {
   useEffect(() => {
     fetchAdminData(true);
   }, []);
+
+  // --------------------------------------------------
+  // GAMIFICATION DATA
+  // --------------------------------------------------
+
+  useEffect(() => {
+    if (activeTab === 'gamification' && !game && !gameLoading) {
+      fetchGamification();
+    }
+    // The tab loads on first view; refreshes are explicit.
+  }, [activeTab]);
+
+  const fetchGamification = async () => {
+    try {
+      setGameLoading(true);
+
+      const [
+        rulesRes,
+        badgesRes,
+        analyticsRes,
+        suspiciousRes,
+        totalsRes,
+        clubsRes,
+      ] = await Promise.all([
+        gamificationAPI.getRules(),
+        gamificationAPI.getAchievements(),
+        gamificationAPI.getAnalytics(),
+        gamificationAPI.getSuspicious(),
+        gamificationAPI.getXpTotals({ limit: 50 }),
+        gamificationAPI.getClubLeaderboard({
+          period: 'overall',
+          limit: 20,
+        }),
+      ]);
+
+      setGame({
+        rules: rulesRes.data,
+        badges: badgesRes.data.achievements || [],
+        analytics: analyticsRes.data,
+        findings: suspiciousRes.data.findings || [],
+        totals: totalsRes.data.entries || [],
+        clubs: clubsRes.data.entries || [],
+      });
+    } catch (error) {
+      setToast({
+        message:
+          error.response?.data?.message ||
+          'Unable to load gamification data',
+        type: 'error',
+      });
+    } finally {
+      setGameLoading(false);
+    }
+  };
+
+  const loadLedger = async (userId) => {
+    if (!userId) {
+      setLedger(null);
+      return;
+    }
+
+    try {
+      setLedgerBusy(true);
+
+      const response = await gamificationAPI.getXpHistory({
+        userId,
+        limit: 15,
+      });
+
+      setLedger(response.data);
+    } catch (error) {
+      setLedger(null);
+
+      setToast({
+        message:
+          error.response?.data?.message ||
+          'Unable to load that student ledger',
+        type: 'error',
+      });
+    } finally {
+      setLedgerBusy(false);
+    }
+  };
+
+  // --------------------------------------------------
+  // AWARD AND DEDUCT
+  // --------------------------------------------------
+
+  const handleAward = async (e) => {
+    e.preventDefault();
+
+    if (!awardForm.userId) {
+      setToast({
+        message: 'Choose a student first',
+        type: 'error',
+      });
+
+      return;
+    }
+
+    const reason = awardForm.reason.trim();
+
+    if (!reason) {
+      setToast({
+        message: 'Every manual award needs a reason',
+        type: 'error',
+      });
+
+      return;
+    }
+
+    const amount =
+      awardForm.amount === '' ? null : Number(awardForm.amount);
+
+    if (amount !== null && !Number.isFinite(amount)) {
+      setToast({ message: 'Amount must be a number', type: 'error' });
+
+      return;
+    }
+
+    if (
+      awardForm.type === 'manual_adjustment' &&
+      (!amount || amount === 0)
+    ) {
+      setToast({
+        message:
+          'A manual adjustment needs a non-zero amount — negative to deduct',
+        type: 'error',
+      });
+
+      return;
+    }
+
+    const payload = {
+      userId: awardForm.userId,
+      type: awardForm.type,
+      reason,
+    };
+
+    if (amount !== null) payload.amount = amount;
+
+    try {
+      setAwardBusy(true);
+
+      const response = await gamificationAPI.award(payload);
+
+      setAwardResult(response.data);
+      setAwardForm((prev) => ({
+        ...prev,
+        amount: '',
+        reason: '',
+      }));
+
+      setToast({
+        message: response.data.message,
+        type: 'success',
+      });
+
+      await Promise.all([
+        loadLedger(awardForm.userId),
+        fetchGamification(),
+      ]);
+    } catch (error) {
+      const data = error.response?.data;
+
+      // A 409 means the award already exists, which the admin needs to see
+      // rather than read as a plain failure.
+      if (data?.skipped) setAwardResult(data);
+
+      setToast({
+        message: data?.message || 'Unable to award points',
+        type: 'error',
+      });
+    } finally {
+      setAwardBusy(false);
+    }
+  };
+
+  const handleReverse = async (entry) => {
+    try {
+      const response = await gamificationAPI.reverseAward(
+        entry._id,
+        'Reversed from the admin panel'
+      );
+
+      setToast({
+        message: response.data.message,
+        type: 'success',
+      });
+
+      await Promise.all([
+        loadLedger(awardForm.userId),
+        fetchGamification(),
+      ]);
+    } catch (error) {
+      setToast({
+        message:
+          error.response?.data?.message ||
+          'Unable to reverse that entry',
+        type: 'error',
+      });
+    }
+  };
+
+  const requestReverse = (entry) => {
+    setPendingAction({
+      title: 'Reverse this XP entry?',
+      message:
+        'A reversing entry is written against the same student, so their total ' +
+        'and rank are recalculated immediately. The original entry stays in the ' +
+        'ledger as the audit trail.',
+      confirmLabel: 'Reverse entry',
+      run: () => handleReverse(entry),
+    });
+  };
+
+  // --------------------------------------------------
+  // BADGE MANAGEMENT
+  // --------------------------------------------------
+
+  const handleBadgeCreate = async (e) => {
+    e.preventDefault();
+
+    try {
+      await gamificationAPI.createAchievement({
+        ...badgeForm,
+        threshold: Number(badgeForm.threshold),
+        xpBonus: Number(badgeForm.xpBonus || 0),
+      });
+
+      setToast({
+        message: 'Badge created',
+        type: 'success',
+      });
+
+      setShowBadgeForm(false);
+      setBadgeEdits({});
+      await fetchGamification();
+    } catch (error) {
+      setToast({
+        message:
+          error.response?.data?.message || 'Unable to create the badge',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleBadgeSave = async (badge) => {
+    const edits = badgeEdits[badge.id];
+
+    if (!edits) return;
+
+    try {
+      await gamificationAPI.updateAchievement(badge.id, edits);
+
+      setToast({
+        message: `${badge.title} updated`,
+        type: 'success',
+      });
+
+      setBadgeEdits((prev) => {
+        const next = { ...prev };
+        delete next[badge.id];
+
+        return next;
+      });
+
+      await fetchGamification();
+    } catch (error) {
+      setToast({
+        message:
+          error.response?.data?.message ||
+          'Unable to update that badge',
+        type: 'error',
+      });
+    }
+  };
+
+  const editBadge = (id, patch) => {
+    setBadgeEdits((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), ...patch },
+    }));
+  };
+
+  // --------------------------------------------------
+  // MAINTENANCE AND REPORTS
+  // --------------------------------------------------
+
+  const handleRecompute = async () => {
+    try {
+      setRecomputeBusy(true);
+
+      const response = await gamificationAPI.recompute({});
+
+      setLastRecompute(response.data);
+
+      setToast({
+        message: response.data.message,
+        type: 'success',
+      });
+
+      await fetchGamification();
+    } catch (error) {
+      setToast({
+        message:
+          error.response?.data?.message || 'Recompute failed',
+        type: 'error',
+      });
+    } finally {
+      setRecomputeBusy(false);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      setReportBusy(true);
+
+      const response = await gamificationAPI.exportCsv({
+        scope: reportForm.scope,
+        period: reportForm.period,
+        ...(reportForm.semester
+          ? { semester: reportForm.semester }
+          : {}),
+      });
+
+      const url = URL.createObjectURL(
+        new Blob([response.data], { type: 'text/csv' })
+      );
+
+      const link = document.createElement('a');
+
+      link.href = url;
+      link.download = `${reportForm.scope}-leaderboard-${reportForm.period}.csv`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+
+      setToast({
+        message: 'Report downloaded',
+        type: 'success',
+      });
+    } catch (error) {
+      setToast({
+        message: await blobErrorMessage(
+          error,
+          'Unable to export the report'
+        ),
+        type: 'error',
+      });
+    } finally {
+      setReportBusy(false);
+    }
+  };
 
   // --------------------------------------------------
   // HELPERS
@@ -223,6 +685,114 @@ const AdminPanel = () => {
         event.club?.clubName?.toLowerCase().includes(value)
     );
   }, [events, search]);
+
+  // --------------------------------------------------
+  // GAMIFICATION DERIVED
+  // --------------------------------------------------
+
+  const studentOptions = useMemo(
+    () =>
+      users
+        .filter((user) => ADMIN_ROLES.includes(user.role))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+    [users]
+  );
+
+  const nameFor = useMemo(() => {
+    const byId = new Map(
+      users.map((user) => [String(user._id), user.name])
+    );
+
+    return (id) => byId.get(String(id)) || '—';
+  }, [users]);
+
+  const studentMatches = useMemo(() => {
+    const value = studentQuery.toLowerCase().trim();
+
+    if (!value) return [];
+
+    return studentOptions
+      .filter(
+        (student) =>
+          student.name?.toLowerCase().includes(value) ||
+          student.studentId?.toLowerCase().includes(value) ||
+          student.department?.toLowerCase().includes(value)
+      )
+      .slice(0, 6);
+  }, [studentQuery, studentOptions]);
+
+  const pickedStudent =
+    studentOptions.find(
+      (student) => student._id === awardForm.userId
+    ) || null;
+
+  const xpRates = useMemo(
+    () =>
+      Object.fromEntries(
+        (game?.rules?.xpRules || []).map((rule) => [
+          rule.type,
+          rule.points,
+        ])
+      ),
+    [game]
+  );
+
+  // Each integrity finding reports a different shape, so the columns are
+  // declared per finding instead of dumping raw ids into the panel.
+  const findingColumns = useMemo(
+    () => ({
+      xp_rate_mismatch: [
+        {
+          header: 'Activity',
+          value: (row) => XP_TYPE_LABELS[row.type] || row.type,
+        },
+        { header: 'Entries', value: (row) => row.rows },
+        { header: 'Average XP', value: (row) => row.averageXp },
+        { header: 'Published XP', value: (row) => row.expectedXp },
+      ],
+      unsettled_attendance: [
+        {
+          header: 'Student',
+          value: (row) => row.studentName || nameFor(row.userId),
+        },
+        { header: 'Method', value: (row) => row.method },
+        { header: 'Checked in', value: (row) => formatDate(row.checkedInAt) },
+      ],
+      duplicate_awards: [
+        { header: 'Student', value: (row) => nameFor(row.userId) },
+        {
+          header: 'Activity',
+          value: (row) => XP_TYPE_LABELS[row.type] || row.type,
+        },
+        { header: 'Awards', value: (row) => row.awards },
+        { header: 'XP paid', value: (row) => row.xp },
+      ],
+      off_window_checkin: [
+        { header: 'Event', value: (row) => row.eventTitle },
+        {
+          header: 'Issue',
+          value: (row) =>
+            row.issue === 'before_start' ? 'Before start' : 'After end',
+        },
+        { header: 'Hours off', value: (row) => row.hoursOff },
+        { header: 'Method', value: (row) => row.method },
+      ],
+      manual_award_burst: [
+        { header: 'Admin', value: (row) => row.name || nameFor(row.adminId) },
+        { header: 'Adjustments', value: (row) => row.awards },
+        { header: 'Net XP', value: (row) => row.netXp },
+        {
+          header: 'Students touched',
+          value: (row) => row.studentsTouched,
+        },
+      ],
+      negative_total_xp: [
+        { header: 'Student', value: (row) => nameFor(row._id) },
+        { header: 'Lifetime XP', value: (row) => row.totalXp },
+      ],
+    }),
+    [nameFor]
+  );
 
   // --------------------------------------------------
   // DELETE CLUB
@@ -486,6 +1056,11 @@ const AdminPanel = () => {
       id: 'notifications',
       label: 'Notifications',
       icon: Bell,
+    },
+    {
+      id: 'gamification',
+      label: 'Gamification',
+      icon: Trophy,
     },
   ];
 
@@ -1524,6 +2099,33 @@ const AdminPanel = () => {
                       />
                     </div>
 
+                    <div>
+                      <label className="field-label">
+                        Activity type
+                      </label>
+
+                      <select
+                        value={newEvent.activityType}
+                        onChange={(e) =>
+                          setNewEvent({
+                            ...newEvent,
+                            activityType: e.target.value,
+                          })
+                        }
+                        className="field"
+                      >
+                        {ACTIVITY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {`${option.label} — ${option.xp} XP per verified attendee`}
+                          </option>
+                        ))}
+                      </select>
+
+                      <p className="mt-2 text-xs leading-5 text-slate-500">
+                        Decides which XP a verified check-in pays.
+                      </p>
+                    </div>
+
                   </div>
 
                   <div className="mt-5 flex flex-wrap gap-3">
@@ -1893,6 +2495,1420 @@ const AdminPanel = () => {
                 </div>
 
               </div>
+            </section>
+          )}
+
+          {/* ==================================================
+              GAMIFICATION
+          ================================================== */}
+
+          {activeTab === 'gamification' && (
+            <section className="space-y-8">
+
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-black">
+                    Gamification
+                  </h2>
+
+                  <p className="mt-1 max-w-2xl text-sm text-slate-500">
+                    Award or deduct XP with a reason, manage the badge
+                    catalog, check the ledger for anomalies, and export
+                    leaderboard reports.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchGamification}
+                  disabled={gameLoading}
+                  className="btn-secondary self-start lg:self-auto"
+                >
+                  <RefreshCw
+                    size={17}
+                    className={gameLoading ? 'animate-spin' : ''}
+                  />
+                  Refresh
+                </button>
+              </div>
+
+              {!game && (
+                <div className="app-card py-16 text-center">
+                  <Trophy size={32} className="mx-auto text-slate-300" />
+
+                  <p className="mt-4 font-bold text-slate-500">
+                    {gameLoading
+                      ? 'Loading gamification data...'
+                      : 'Gamification data is not loaded yet.'}
+                  </p>
+
+                  {!gameLoading && (
+                    <button
+                      type="button"
+                      onClick={fetchGamification}
+                      className="btn-primary mt-5"
+                    >
+                      Load now
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {game && (
+                <>
+
+                  {/* ANALYTICS */}
+
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+                    <article className="metric-card">
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-400">
+                        XP issued
+                      </p>
+
+                      <p className="mt-2 text-3xl font-black text-black">
+                        {(game.analytics?.totalXp || 0).toLocaleString()}
+                      </p>
+                    </article>
+
+                    <article className="metric-card">
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-400">
+                        Ledger entries
+                      </p>
+
+                      <p className="mt-2 text-3xl font-black text-black">
+                        {(
+                          game.analytics?.totalTransactions || 0
+                        ).toLocaleString()}
+                      </p>
+                    </article>
+
+                    <article className="metric-card">
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-400">
+                        Scored students
+                      </p>
+
+                      <p className="mt-2 text-3xl font-black text-black">
+                        {(
+                          game.analytics?.scoredStudents || 0
+                        ).toLocaleString()}
+                      </p>
+                    </article>
+
+                    <article className="metric-card">
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-400">
+                        Manual adjustments
+                      </p>
+
+                      <p className="mt-2 text-3xl font-black text-black">
+                        {(game.analytics?.manualAwards || 0).toLocaleString()}
+                      </p>
+                    </article>
+
+                  </div>
+
+                  <div className="grid gap-6 xl:grid-cols-2">
+
+                    {/* XP BY ACTIVITY */}
+
+                    <div>
+                      <h3 className="text-xl font-black text-black">
+                        XP by activity
+                      </h3>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        Lifetime totals per transaction type.
+                      </p>
+
+                      <div className="table-shell mt-4 overflow-x-auto">
+                        <table className="w-full min-w-[420px]">
+                          <thead className="table-head">
+                            <tr>
+                              <th className="table-cell text-left">
+                                Activity
+                              </th>
+                              <th className="table-cell text-left">
+                                Entries
+                              </th>
+                              <th className="table-cell text-left">
+                                XP
+                              </th>
+                              <th className="table-cell text-left">
+                                Published rate
+                              </th>
+                            </tr>
+                          </thead>
+
+                          <tbody className="divide-y divide-slate-100">
+                            {(game.analytics?.byType || []).map((row) => (
+                              <tr key={row.type}>
+                                <td className="table-cell font-bold text-black">
+                                  {XP_TYPE_LABELS[row.type] || row.type}
+                                </td>
+
+                                <td className="table-cell">
+                                  {row.count}
+                                </td>
+
+                                <td className="table-cell font-bold">
+                                  {row.xp.toLocaleString()}
+                                </td>
+
+                                <td className="table-cell text-slate-500">
+                                  {xpRates[row.type] === undefined
+                                    ? '—'
+                                    : `${xpRates[row.type]} XP`}
+                                </td>
+                              </tr>
+                            ))}
+
+                            {!(game.analytics?.byType || []).length && (
+                              <tr>
+                                <td
+                                  colSpan="4"
+                                  className="p-12 text-center text-sm text-slate-500"
+                                >
+                                  No XP has been awarded yet.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* DEPARTMENTS */}
+
+                    <div>
+                      <h3 className="text-xl font-black text-black">
+                        Most active departments
+                      </h3>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        Students with a positive lifetime score, grouped by
+                        department.
+                      </p>
+
+                      <div className="table-shell mt-4 overflow-x-auto">
+                        <table className="w-full min-w-[420px]">
+                          <thead className="table-head">
+                            <tr>
+                              <th className="table-cell text-left">
+                                Department
+                              </th>
+                              <th className="table-cell text-left">
+                                Students
+                              </th>
+                              <th className="table-cell text-left">
+                                Total XP
+                              </th>
+                            </tr>
+                          </thead>
+
+                          <tbody className="divide-y divide-slate-100">
+                            {(game.analytics?.byDepartment || []).map(
+                              (row) => (
+                                <tr key={row.department}>
+                                  <td className="table-cell font-bold text-black">
+                                    {row.department}
+                                  </td>
+
+                                  <td className="table-cell">
+                                    {row.students}
+                                  </td>
+
+                                  <td className="table-cell font-bold">
+                                    {row.xp.toLocaleString()}
+                                  </td>
+                                </tr>
+                              )
+                            )}
+
+                            {!(game.analytics?.byDepartment || []).length && (
+                              <tr>
+                                <td
+                                  colSpan="3"
+                                  className="p-12 text-center text-sm text-slate-500"
+                                >
+                                  Nothing to compare yet.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* AWARD / DEDUCT + LEDGER */}
+
+                  <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
+
+                    <form onSubmit={handleAward} className="app-card h-fit space-y-5">
+
+                      <div className="flex items-center gap-3">
+
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                          <Trophy size={20} />
+                        </div>
+
+                        <div>
+                          <h3 className="text-xl font-black text-black">
+                            Award or deduct
+                          </h3>
+
+                          <p className="text-xs text-slate-500">
+                            Every manual entry needs a reason
+                          </p>
+                        </div>
+
+                      </div>
+
+                      <div>
+                        <label className="field-label">Student</label>
+
+                        {pickedStudent ? (
+                          <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+
+                            <div className="min-w-0">
+                              <p className="truncate font-bold text-black">
+                                {pickedStudent.name}
+                              </p>
+
+                              <p className="text-xs text-slate-500">
+                                {
+                                  [
+                                    pickedStudent.studentId,
+                                    pickedStudent.department,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ') || 'Student'
+                                }
+                              </p>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAwardForm((prev) => ({
+                                  ...prev,
+                                  userId: '',
+                                }));
+                                setStudentQuery('');
+                                setLedger(null);
+                              }}
+                              className="btn-soft px-3 py-1.5 text-xs"
+                            >
+                              <X size={14} />
+                              Change
+                            </button>
+
+                          </div>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              value={studentQuery}
+                              onChange={(e) =>
+                                setStudentQuery(e.target.value)
+                              }
+                              className="field"
+                              placeholder="Search name, student ID or department"
+                            />
+
+                            <div className="mt-2 space-y-1">
+                              {studentMatches.length ? (
+                                studentMatches.map((student) => (
+                                  <button
+                                    key={student._id}
+                                    type="button"
+                                    onClick={() => {
+                                      setAwardForm((prev) => ({
+                                        ...prev,
+                                        userId: student._id,
+                                      }));
+                                      setStudentQuery('');
+                                      loadLedger(student._id);
+                                    }}
+                                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition hover:bg-slate-50"
+                                  >
+                                    <span className="truncate text-sm font-bold text-slate-700">
+                                      {student.name}
+                                    </span>
+
+                                    <span className="shrink-0 text-xs font-semibold text-slate-400">
+                                      {student.department || '—'}
+                                    </span>
+                                  </button>
+                                ))
+                              ) : (
+                                <p className="text-xs text-slate-500">
+                                  {studentQuery.trim()
+                                    ? 'No matching student.'
+                                    : 'Type a name to choose a student.'}
+                                </p>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="field-label">
+                          Activity
+                        </label>
+
+                        <select
+                          value={awardForm.type}
+                          onChange={(e) =>
+                            setAwardForm((prev) => ({
+                              ...prev,
+                              type: e.target.value,
+                            }))
+                          }
+                          className="field"
+                        >
+                          {(
+                            game.rules?.awardTypes || AWARD_TYPE_ORDER
+                          ).map((type) => (
+                            <option key={type} value={type}>
+                              {
+                                `${XP_TYPE_LABELS[type] || type}` +
+                                  (xpRates[type] === undefined
+                                    ? ''
+                                    : ` — ${xpRates[type]} XP`)
+                              }
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="field-label">
+                          Amount
+                        </label>
+
+                        <input
+                          type="number"
+                          value={awardForm.amount}
+                          onChange={(e) =>
+                            setAwardForm((prev) => ({
+                              ...prev,
+                              amount: e.target.value,
+                            }))
+                          }
+                          className="field"
+                          placeholder={
+                            xpRates[awardForm.type]
+                              ? `Defaults to ${xpRates[awardForm.type]}`
+                              : 'Required, e.g. -40'
+                          }
+                        />
+
+                        <p className="mt-2 text-xs text-slate-500">
+                          Leave empty to pay the published rate. Use a
+                          negative number to deduct XP.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="field-label">
+                          Reason
+                        </label>
+
+                        <textarea
+                          required
+                          value={awardForm.reason}
+                          onChange={(e) =>
+                            setAwardForm((prev) => ({
+                              ...prev,
+                              reason: e.target.value,
+                            }))
+                          }
+                          className="field min-h-28 resize-y"
+                          placeholder="Judge decision at the winter hackathon"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={awardBusy}
+                        className="btn-primary w-full"
+                      >
+                        <Trophy size={17} />
+                        {awardBusy ? 'Saving...' : 'Write to ledger'}
+                      </button>
+
+                      {awardResult && (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+
+                          <p className="font-black text-slate-900">
+                            {awardResult.message}
+                          </p>
+
+                          {(awardResult.awarded || []).map((row) => (
+                            <p
+                              key={row.userId}
+                              className="mt-1 text-xs text-green-600"
+                            >
+                              {`+${row.amount} XP — ${row.name}`}
+                            </p>
+                          ))}
+
+                          {(awardResult.skipped || []).map((row) => (
+                            <p
+                              key={row.userId}
+                              className="mt-1 text-xs text-slate-500"
+                            >
+                              {`${row.name}: ${row.reason}`}
+                            </p>
+                          ))}
+
+                        </div>
+                      )}
+
+                    </form>
+
+                    {/* LEDGER */}
+
+                    <div>
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-xl font-black text-black">
+                            Student ledger
+                          </h3>
+
+                          <p className="mt-1 text-sm text-slate-500">
+                            {pickedStudent
+                              ? `${pickedStudent.name} — newest entries first`
+                              : 'Choose a student to read their XP history.'}
+                          </p>
+                        </div>
+
+                        {ledger && (
+                          <span className="chip">
+                            {ledger.total} entries
+                          </span>
+                        )}
+                      </div>
+
+                      {!pickedStudent ? (
+                        <div className="app-card py-16 text-center">
+                          <Search
+                            size={32}
+                            className="mx-auto text-slate-300"
+                          />
+
+                          <p className="mt-4 font-bold text-slate-500">
+                            No student selected.
+                          </p>
+                        </div>
+                      ) : ledgerBusy ? (
+                        <div className="app-card py-16 text-center">
+                          <RefreshCw
+                            size={28}
+                            className="mx-auto animate-spin text-slate-300"
+                          />
+
+                          <p className="mt-4 font-bold text-slate-500">
+                            Loading ledger...
+                          </p>
+                        </div>
+                      ) : !ledger || !ledger.entries.length ? (
+                        <div className="app-card py-16 text-center">
+                          <CheckCircle2
+                            size={32}
+                            className="mx-auto text-slate-300"
+                          />
+
+                          <p className="mt-4 font-bold text-slate-500">
+                            {pickedStudent.name} has no XP entries yet.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="table-shell overflow-x-auto">
+                          <table className="w-full min-w-[760px]">
+
+                            <thead className="table-head">
+                              <tr>
+                                <th className="table-cell text-left">
+                                  Date
+                                </th>
+                                <th className="table-cell text-left">
+                                  Activity
+                                </th>
+                                <th className="table-cell text-left">
+                                  Reason
+                                </th>
+                                <th className="table-cell text-left">
+                                  XP
+                                </th>
+                                <th className="table-cell text-left">
+                                  Source
+                                </th>
+                                <th className="table-cell text-right">
+                                  Action
+                                </th>
+                              </tr>
+                            </thead>
+
+                            <tbody className="divide-y divide-slate-100">
+                              {ledger.entries.map((entry) => (
+                                <tr key={entry._id}>
+                                  <td className="table-cell text-sm whitespace-nowrap">
+                                    {formatDate(entry.createdAt)}
+                                  </td>
+
+                                  <td className="table-cell text-sm font-bold text-black">
+                                    {XP_TYPE_LABELS[entry.type] || entry.type}
+                                  </td>
+
+                                  <td className="table-cell text-sm text-slate-600">
+                                    {entry.reason || '—'}
+
+                                    {entry.awardedBy?.name && (
+                                      <span className="mt-1 block text-xs text-slate-400">
+                                        {`by ${entry.awardedBy.name}`}
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  <td
+                                    className={`table-cell font-black ${
+                                      entry.amount >= 0
+                                        ? 'text-green-600'
+                                        : 'text-red-600'
+                                    }`}
+                                  >
+                                    {`${entry.amount >= 0 ? '+' : ''}${entry.amount}`}
+                                  </td>
+
+                                  <td className="table-cell">
+                                    <span className="chip capitalize text-xs">
+                                      {entry.source || 'system'}
+                                    </span>
+                                  </td>
+
+                                  <td className="table-cell text-right">
+                                    {entry.reversedBy ? (
+                                      <span className="text-xs font-bold text-slate-400">
+                                        Reversed
+                                      </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => requestReverse(entry)}
+                                        className="btn-secondary px-3 py-1.5 text-xs"
+                                      >
+                                        <Undo2 size={14} />
+                                        Reverse
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+
+                  {/* RANKINGS */}
+
+                  <div className="grid gap-6 xl:grid-cols-2">
+
+                    <div>
+                      <div className="mb-4 flex items-end justify-between gap-3">
+                        <div>
+                          <h3 className="text-xl font-black text-black">
+                            Student rankings
+                          </h3>
+
+                          <p className="mt-1 text-sm text-slate-500">
+                            Top 50 lifetime scores, read from the projection.
+                          </p>
+                        </div>
+
+                        <Link to="/leaderboard" className="btn-soft text-xs">
+                          Public board
+                          <ChevronRight size={14} />
+                        </Link>
+                      </div>
+
+                      <div className="table-shell overflow-x-auto">
+                        <table className="w-full min-w-[520px]">
+                          <thead className="table-head">
+                            <tr>
+                              <th className="table-cell text-left">#</th>
+                              <th className="table-cell text-left">
+                                Student
+                              </th>
+                              <th className="table-cell text-left">
+                                Department
+                              </th>
+                              <th className="table-cell text-left">
+                                XP
+                              </th>
+                            </tr>
+                          </thead>
+
+                          <tbody className="divide-y divide-slate-100">
+                            {game.totals.map((row, index) => (
+                              <tr key={row.userId}>
+                                <td className="table-cell font-black text-slate-400">
+                                  {index + 1}
+                                </td>
+
+                                <td className="table-cell">
+                                  <p className="font-bold text-black">
+                                    {row.name}
+                                  </p>
+
+                                  <p className="text-xs text-slate-500">
+                                    {row.studentId || '—'}
+                                  </p>
+                                </td>
+
+                                <td className="table-cell text-sm text-slate-600">
+                                  {row.department || '—'}
+                                </td>
+
+                                <td className="table-cell font-black">
+                                  {row.totalXp.toLocaleString()}
+                                </td>
+                              </tr>
+                            ))}
+
+                            {!game.totals.length && (
+                              <tr>
+                                <td
+                                  colSpan="4"
+                                  className="p-12 text-center text-sm text-slate-500"
+                                >
+                                  Nobody has scored yet.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="mb-4 text-xl font-black text-black">
+                        Club rankings
+                      </h3>
+
+                      <div className="table-shell overflow-x-auto">
+                        <table className="w-full min-w-[520px]">
+                          <thead className="table-head">
+                            <tr>
+                              <th className="table-cell text-left">#</th>
+                              <th className="table-cell text-left">Club</th>
+                              <th className="table-cell text-left">
+                                Events
+                              </th>
+                              <th className="table-cell text-left">
+                                Members
+                              </th>
+                              <th className="table-cell text-left">
+                                Score
+                              </th>
+                            </tr>
+                          </thead>
+
+                          <tbody className="divide-y divide-slate-100">
+                            {game.clubs.map((row, index) => (
+                              <tr key={row.clubId}>
+                                <td className="table-cell font-black text-slate-400">
+                                  {row.rank ?? index + 1}
+                                </td>
+
+                                <td className="table-cell">
+                                  <p className="font-bold text-black">
+                                    {row.club.name}
+                                  </p>
+
+                                  <p className="text-xs text-slate-500">
+                                    {row.club.department || '—'}
+                                  </p>
+                                </td>
+
+                                <td className="table-cell">
+                                  {row.eventsOrganized}
+                                </td>
+
+                                <td className="table-cell">
+                                  {row.club.members}
+                                </td>
+
+                                <td className="table-cell font-black">
+                                  {row.totalXp.toLocaleString()}
+                                </td>
+                              </tr>
+                            ))}
+
+                            {!game.clubs.length && (
+                              <tr>
+                                <td
+                                  colSpan="5"
+                                  className="p-12 text-center text-sm text-slate-500"
+                                >
+                                  No club activity yet.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* BADGES */}
+
+                  <div className="space-y-4">
+
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <h3 className="text-xl font-black text-black">
+                          Badge catalog
+                        </h3>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                          Thresholds apply to the next award evaluation; use
+                          recompute to apply them to everyone now.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowBadgeForm((open) => !open)}
+                        className="btn-secondary self-start"
+                      >
+                        <Plus size={17} />
+                        {showBadgeForm ? 'Cancel' : 'New badge'}
+                      </button>
+                    </div>
+
+                    {showBadgeForm && (
+                      <form
+                        onSubmit={handleBadgeCreate}
+                        className="app-card space-y-5"
+                      >
+
+                        <div className="grid gap-5 lg:grid-cols-2">
+
+                          <div>
+                            <label className="field-label">Slug</label>
+
+                            <input
+                              type="text"
+                              required
+                              value={badgeForm.slug}
+                              onChange={(e) =>
+                                setBadgeForm((prev) => ({
+                                  ...prev,
+                                  slug: e.target.value,
+                                }))
+                              }
+                              className="field"
+                              placeholder="debate_star"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="field-label">Title</label>
+
+                            <input
+                              type="text"
+                              required
+                              value={badgeForm.title}
+                              onChange={(e) =>
+                                setBadgeForm((prev) => ({
+                                  ...prev,
+                                  title: e.target.value,
+                                }))
+                              }
+                              className="field"
+                              placeholder="Debate Star"
+                            />
+                          </div>
+
+                        </div>
+
+                        <div>
+                          <label className="field-label">Description</label>
+
+                          <textarea
+                            required
+                            value={badgeForm.description}
+                            onChange={(e) =>
+                              setBadgeForm((prev) => ({
+                                ...prev,
+                                description: e.target.value,
+                              }))
+                            }
+                            className="field min-h-24 resize-y"
+                            placeholder="What a student has to do to earn it"
+                          />
+                        </div>
+
+                        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+
+                          <div>
+                            <label className="field-label">Metric</label>
+
+                            <select
+                              value={badgeForm.metric}
+                              onChange={(e) =>
+                                setBadgeForm((prev) => ({
+                                  ...prev,
+                                  metric: e.target.value,
+                                }))
+                              }
+                              className="field"
+                            >
+                              {(
+                                game.rules?.metrics ||
+                                Object.keys(METRIC_LABELS)
+                              ).map((metric) => (
+                                <option key={metric} value={metric}>
+                                  {METRIC_LABELS[metric] || metric}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="field-label">Icon</label>
+
+                            <input
+                              type="text"
+                              value={badgeForm.icon}
+                              onChange={(e) =>
+                                setBadgeForm((prev) => ({
+                                  ...prev,
+                                  icon: e.target.value,
+                                }))
+                              }
+                              className="field"
+                              placeholder="Trophy"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="field-label">Threshold</label>
+
+                            <input
+                              type="number"
+                              min="1"
+                              required
+                              value={badgeForm.threshold}
+                              onChange={(e) =>
+                                setBadgeForm((prev) => ({
+                                  ...prev,
+                                  threshold: e.target.value,
+                                }))
+                              }
+                              className="field"
+                              placeholder="3"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="field-label">XP bonus</label>
+
+                            <input
+                              type="number"
+                              min="0"
+                              value={badgeForm.xpBonus}
+                              onChange={(e) =>
+                                setBadgeForm((prev) => ({
+                                  ...prev,
+                                  xpBonus: e.target.value,
+                                }))
+                              }
+                              className="field"
+                              placeholder="50"
+                            />
+                          </div>
+
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="btn-primary"
+                        >
+                          <Plus size={17} />
+                          Create badge
+                        </button>
+
+                      </form>
+                    )}
+
+                    <div className="table-shell overflow-x-auto">
+                      <table className="w-full min-w-[900px]">
+
+                        <thead className="table-head">
+                          <tr>
+                            <th className="table-cell text-left">Badge</th>
+                            <th className="table-cell text-left">Metric</th>
+                            <th className="table-cell text-left">Threshold</th>
+                            <th className="table-cell text-left">XP bonus</th>
+                            <th className="table-cell text-left">Active</th>
+                            <th className="table-cell text-right">
+                              Save
+                            </th>
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-100">
+                          {game.badges.map((badge) => {
+                            const edits = badgeEdits[badge.id] || {};
+
+                            const dirty =
+                              Object.keys(edits).length > 0;
+
+                            return (
+                              <tr key={badge.id}>
+                                <td className="table-cell">
+                                  <p className="font-bold text-black">
+                                    {badge.title}
+                                  </p>
+
+                                  <p className="max-w-md text-xs text-slate-500">
+                                    {badge.description}
+                                  </p>
+                                </td>
+
+                                <td className="table-cell text-sm text-slate-600">
+                                  {METRIC_LABELS[badge.metric] || badge.metric}
+                                </td>
+
+                                <td className="table-cell">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={edits.threshold ?? badge.threshold}
+                                    onChange={(e) =>
+                                      editBadge(badge.id, {
+                                        threshold: Number(e.target.value),
+                                      })
+                                    }
+                                    className="field w-28 py-1.5 text-sm"
+                                  />
+                                </td>
+
+                                <td className="table-cell">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={edits.xpBonus ?? badge.xpBonus}
+                                    onChange={(e) =>
+                                      editBadge(badge.id, {
+                                        xpBonus: Number(e.target.value),
+                                      })
+                                    }
+                                    className="field w-28 py-1.5 text-sm"
+                                  />
+                                </td>
+
+                                <td className="table-cell">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      editBadge(badge.id, {
+                                        active: !(edits.active ?? badge.active),
+                                      })
+                                    }
+                                    className={
+                                      (edits.active ?? badge.active)
+                                        ? 'btn-soft px-3 py-1.5 text-xs'
+                                        : 'btn-secondary px-3 py-1.5 text-xs'
+                                    }
+                                  >
+                                    {(edits.active ?? badge.active)
+                                      ? 'Visible'
+                                      : 'Hidden'}
+                                  </button>
+                                </td>
+
+                                <td className="table-cell text-right">
+                                  <button
+                                    type="button"
+                                    disabled={!dirty}
+                                    onClick={() => handleBadgeSave(badge)}
+                                    className="btn-primary px-3 py-1.5 text-xs"
+                                  >
+                                    Save
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+
+                          {!game.badges.length && (
+                            <tr>
+                              <td
+                                colSpan="6"
+                                className="p-12 text-center text-sm text-slate-500"
+                              >
+                                The badge catalog is empty.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                  </div>
+
+                  {/* INTEGRITY + REPORTS */}
+
+                  <div className="grid gap-6 xl:grid-cols-2">
+
+                    <div className="space-y-4">
+
+                      <div className="flex items-end justify-between gap-3">
+                        <div>
+                          <h3 className="text-xl font-black text-black">
+                            Integrity checks
+                          </h3>
+
+                          <p className="mt-1 text-sm text-slate-500">
+                            {game.findings.length
+                              ? `${game.findings.length} check(s) flagged something.`
+                              : 'Every invariant check passed.'}
+                          </p>
+                        </div>
+
+                        <span className="chip">
+                          {`Drift: ${game.analytics?.driftingCount || 0}`}
+                        </span>
+                      </div>
+
+                      {game.findings.map((finding) => {
+                        const columns =
+                          findingColumns[finding.key] || [];
+
+                        const rows =
+                          finding.types || finding.examples || [];
+
+                        return (
+                          <article
+                            key={finding.key}
+                            className="app-card space-y-3"
+                          >
+
+                            <div className="flex flex-wrap items-center gap-3">
+
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold capitalize ${
+                                  finding.severity === 'high'
+                                    ? 'border-red-200 bg-red-50 text-red-600'
+                                    : finding.severity === 'medium'
+                                      ? 'border-slate-200 bg-slate-100 text-amber-600'
+                                      : 'border-slate-200 bg-white text-slate-600'
+                                }`}
+                              >
+                                <AlertTriangle size={13} />
+                                {finding.severity}
+                              </span>
+
+                              <h4 className="font-black text-black">
+                                {finding.title}
+                              </h4>
+
+                            </div>
+
+                            <p className="text-sm leading-6 text-slate-600">
+                              {finding.detail}
+                            </p>
+
+                            {columns.length > 0 && rows.length > 0 && (
+                              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                                <table className="w-full min-w-[420px]">
+                                  <thead className="table-head">
+                                    <tr>
+                                      {columns.map((column) => (
+                                        <th
+                                          key={column.header}
+                                          className="table-cell text-left text-xs"
+                                        >
+                                          {column.header}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+
+                                  <tbody className="divide-y divide-slate-100">
+                                    {rows.slice(0, 5).map((row, index) => (
+                                      <tr key={index}>
+                                        {columns.map((column) => (
+                                          <td
+                                            key={column.header}
+                                            className="table-cell text-sm text-slate-700"
+                                          >
+                                            {column.value(row)}
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+
+                          </article>
+                        );
+                      })}
+
+                      {(game.analytics?.driftingProfiles || []).length > 0 && (
+                        <article className="app-card space-y-3">
+                          <h4 className="font-black text-black">
+                            Cached totals that disagree with the ledger
+                          </h4>
+
+                          <div className="space-y-2">
+                            {game.analytics.driftingProfiles.map((row) => (
+                              <div
+                                key={String(row.userId)}
+                                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+                              >
+                                <span className="truncate text-sm font-bold text-slate-700">
+                                  {nameFor(row.userId)}
+                                </span>
+
+                                <span className="shrink-0 text-xs font-semibold text-slate-500">
+                                  {`cached ${row.cached ?? '—'} · ledger ${row.ledger}`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </article>
+                      )}
+
+                      <div className="app-card space-y-4">
+
+                        <div className="flex items-center gap-3">
+
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                            <RotateCcw size={20} />
+                          </div>
+
+                          <div>
+                            <h4 className="text-lg font-black text-black">
+                              Recompute everything
+                            </h4>
+
+                            <p className="text-xs text-slate-500">
+                              Settles unpaid attendance, rebuilds every cached
+                              total and re-awards badges. Safe to run twice.
+                            </p>
+                          </div>
+
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={recomputeBusy}
+                          onClick={() =>
+                            setPendingAction({
+                              title: 'Recompute gamification?',
+                              message:
+                                'This scans attendance history, writes any ' +
+                                'missing XP awards, rebuilds every cached total ' +
+                                'and re-evaluates badges. It cannot remove ' +
+                                'awards that were already paid.',
+                              confirmLabel: 'Run recompute',
+                              run: handleRecompute,
+                            })
+                          }
+                          className="btn-primary"
+                        >
+                          <RotateCcw
+                            size={17}
+                            className={recomputeBusy ? 'animate-spin' : ''}
+                          />
+                          {recomputeBusy ? 'Running...' : 'Run recompute'}
+                        </button>
+
+                        {lastRecompute && (
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+
+                            <p className="font-black text-slate-900">
+                              {lastRecompute.message}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              {
+                                `${
+                                  lastRecompute.backfill?.eventsScanned || 0
+                                } events scanned, ` +
+                                  `${
+                                    lastRecompute.backfill?.settled || 0
+                                  } awards settled, ` +
+                                  `${lastRecompute.studentsRebuilt || 0} of ` +
+                                  `${
+                                    lastRecompute.studentsWithLedger || 0
+                                  } students rebuilt` +
+                                  `${
+                                    lastRecompute.remaining
+                                      ? `, ${lastRecompute.remaining} still queued`
+                                      : ''
+                                  }`
+                              }
+                            </p>
+
+                          </div>
+                        )}
+
+                      </div>
+
+                    </div>
+
+                    {/* REPORTS */}
+
+                    <div className="app-card h-fit space-y-5">
+
+                      <div className="flex items-center gap-3">
+
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                          <Download size={20} />
+                        </div>
+
+                        <div>
+                          <h3 className="text-xl font-black text-black">
+                            Leaderboard reports
+                          </h3>
+
+                          <p className="text-xs text-slate-500">
+                            CSV export, one row per rank
+                          </p>
+                        </div>
+
+                      </div>
+
+                      <div className="grid gap-5 sm:grid-cols-2">
+
+                        <div>
+                          <label className="field-label">Board</label>
+
+                          <select
+                            value={reportForm.scope}
+                            onChange={(e) =>
+                              setReportForm((prev) => ({
+                                ...prev,
+                                scope: e.target.value,
+                              }))
+                            }
+                            className="field"
+                          >
+                            <option value="students">
+                              Student leaderboard
+                            </option>
+
+                            <option value="clubs">
+                              Club leaderboard
+                            </option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="field-label">Period</label>
+
+                          <select
+                            value={reportForm.period}
+                            onChange={(e) =>
+                              setReportForm((prev) => ({
+                                ...prev,
+                                period: e.target.value,
+                                semester:
+                                  e.target.value === 'semester'
+                                    ? prev.semester
+                                    : '',
+                              }))
+                            }
+                            className="field"
+                          >
+                            {(game.rules?.periods || [
+                              'overall',
+                              'weekly',
+                              'monthly',
+                              'semester',
+                            ]).map((period) => (
+                              <option key={period} value={period}>
+                                {period.charAt(0).toUpperCase() +
+                                  period.slice(1)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                      </div>
+
+                      {reportForm.period === 'semester' && (
+                        <div>
+                          <label className="field-label">Semester</label>
+
+                          <select
+                            value={reportForm.semester}
+                            onChange={(e) =>
+                              setReportForm((prev) => ({
+                                ...prev,
+                                semester: e.target.value,
+                              }))
+                            }
+                            className="field"
+                          >
+                            <option value="">Current term</option>
+
+                            {(game.rules?.semesters || []).map((term) => (
+                              <option key={term.key} value={term.key}>
+                                {term.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleExport}
+                        disabled={reportBusy}
+                        className="btn-primary w-full"
+                      >
+                        <Download size={17} />
+                        {reportBusy ? 'Preparing...' : 'Download CSV'}
+                      </button>
+
+                      <p className="text-xs leading-5 text-slate-500">
+                        Reports contain rank, name, student ID, department,
+                        score and activity counts. Contact details are never
+                        included.
+                      </p>
+
+                      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <Medal size={16} className="text-amber-600" />
+
+                        <p className="text-xs font-semibold text-slate-600">
+                          {`${
+                            game.badges.length
+                          } badges in the catalog`}
+                        </p>
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                </>
+              )}
+
             </section>
           )}
 

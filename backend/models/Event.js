@@ -38,6 +38,22 @@ const eventSchema = new mongoose.Schema(
       trim: true
     },
 
+    // Drives which XP award a verified attendance row produces. Defaults to a
+    // plain event, so records created before gamification keep scoring the
+    // standard attendance amount.
+    activityType: {
+      type: String,
+      enum: ['event', 'competition', 'workshop', 'volunteering'],
+      default: 'event'
+    },
+
+    // Set once the organising credit has been paid out, so the +30 award for
+    // running an event cannot be claimed twice by an impatient club leader.
+    organizerCreditedAt: {
+      type: Date,
+      default: null
+    },
+
     club: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Club',

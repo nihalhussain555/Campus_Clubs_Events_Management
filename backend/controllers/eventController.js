@@ -14,6 +14,15 @@ import {
   verifyCheckinToken
 } from '../utils/checkinToken.js';
 
+import {
+  awardForAttendance,
+  reverseForAttendance
+} from '../services/xpService.js';
+
+import { settleAttendanceXp } from '../services/attendanceRewardService.js';
+
+import { isActivityType } from '../config/xpRules.js';
+
 import { canManageEvent, canManageClub } from '../middleware/permissions.js';
 
 
@@ -64,8 +73,16 @@ export const createEvent = async (req, res) => {
       category,
       club,
       capacity,
-      certificateEnabled
+      certificateEnabled,
+      activityType
     } = req.body;
+
+    if (activityType !== undefined && !isActivityType(activityType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Activity type must be event, competition, workshop or volunteering'
+      });
+    }
 
     if (!title || !description || !date || !endDate || !club) {
       return res.status(400).json({
@@ -122,6 +139,7 @@ export const createEvent = async (req, res) => {
       category: category?.trim() || 'General',
       club,
       capacity: Number(capacity) || 100,
+      activityType: activityType || 'event',
       certificateEnabled:
         certificateEnabled !== undefined
           ? Boolean(certificateEnabled)
@@ -334,8 +352,16 @@ export const updateEvent = async (req, res) => {
       club,
       capacity,
       status,
-      certificateEnabled
+      certificateEnabled,
+      activityType
     } = req.body;
+
+    if (activityType !== undefined && !isActivityType(activityType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Activity type must be event, competition, workshop or volunteering'
+      });
+    }
 
     const startDate = date
       ? new Date(date)
@@ -381,6 +407,12 @@ export const updateEvent = async (req, res) => {
     event.location = location ?? event.location;
     event.category = category ?? event.category;
     event.club = club ?? event.club;
+
+    // Points are stamped at verification time, so changing the activity type
+    // later only affects students who check in from now on.
+    if (activityType !== undefined) {
+      event.activityType = activityType;
+    }
 
     if (capacity !== undefined) {
       event.capacity = Number(capacity);
@@ -641,8 +673,10 @@ export const unregisterFromEvent = async (req, res) => {
 const recordAttendance = async ({ event, userId, method, verifiedBy }) => {
   const oid = new mongoose.Types.ObjectId(userId);
 
+  let attendance;
+
   try {
-    await Attendance.create({
+    attendance = await Attendance.create({
       event: event._id,
       user: oid,
       method,
@@ -674,7 +708,30 @@ const recordAttendance = async ({ event, userId, method, verifiedBy }) => {
     certificate = await issueCertificate(userId, event._id);
   }
 
-  return certificate;
+  // Gamification runs last and never rolls the check-in back. The student was
+  // verifiably present, which matters more than the points.
+  let xp = null;
+
+  try {
+    xp = await awardForAttendance({
+      event: event.toObject(),
+      userId,
+      attendance
+    });
+  } catch (error) {
+    console.error('Attendance XP award failed:', error.message);
+
+    // Settle from the attendance rows instead: the row above is committed, so
+    // a second attempt finds it and pays it, while a scan retry could not.
+    try {
+      const settled = await settleAttendanceXp(event._id);
+      xp = settled ? { duplicated: false, settled } : xp;
+    } catch (retryError) {
+      console.error('Attendance XP settle retry failed:', retryError.message);
+    }
+  }
+
+  return { certificate, xp };
 };
 
 const reloadEvent = (id) =>
@@ -807,7 +864,7 @@ export const checkInEvent = async (req, res) => {
       });
     }
 
-    const certificate = await recordAttendance({
+    const { certificate, xp } = await recordAttendance({
       event,
       userId: student._id,
       method: 'qr_scan',
@@ -819,6 +876,7 @@ export const checkInEvent = async (req, res) => {
       message: `${student.name} checked in successfully`,
       student: { id: student._id, name: student.name, email: student.email },
       certificate,
+      xpAwarded: xp?.duplicated ? 0 : xp?.transaction?.amount ?? null,
       event: await reloadEvent(event._id)
     });
   } catch (error) {
@@ -871,7 +929,7 @@ export const markAttendance = async (req, res) => {
       });
     }
 
-    const certificate = await recordAttendance({
+    const { certificate, xp } = await recordAttendance({
       event,
       userId,
       method: 'roster',
@@ -882,7 +940,8 @@ export const markAttendance = async (req, res) => {
       success: true,
       message: 'Attendance marked successfully',
       event: await reloadEvent(event._id),
-      certificate
+      certificate,
+      xpAwarded: xp?.duplicated ? 0 : xp?.transaction?.amount ?? null
     });
 
   } catch (error) {
@@ -950,6 +1009,13 @@ export const removeAttendance = async (req, res) => {
 
     await event.save();
 
+    // Read before deleting: the attendance _id is what the XP award was keyed
+    // to, and without it the matching ledger row could not be reversed.
+    const attendanceRow = await Attendance.findOne({
+      event: event._id,
+      user: userId
+    }).lean();
+
     await Attendance.deleteOne({
       event: event._id,
       user: userId
@@ -960,6 +1026,23 @@ export const removeAttendance = async (req, res) => {
       event: event._id,
       user: userId
     });
+
+    let xpReversed = null;
+
+    if (attendanceRow) {
+      try {
+        const reversal = await reverseForAttendance({
+          attendance: attendanceRow,
+          userId,
+          awardedBy: req.user.id,
+          reason: `Attendance revoked - ${event.title}`
+        });
+
+        xpReversed = reversal ? -reversal.amount : null;
+      } catch (error) {
+        console.error('Attendance XP reversal failed:', error.message);
+      }
+    }
 
     const updatedEvent =
       await Event.findById(event._id)
@@ -981,7 +1064,8 @@ export const removeAttendance = async (req, res) => {
       success: true,
       message:
         'Attendance removed successfully',
-      event: updatedEvent
+      event: updatedEvent,
+      xpReversed
     });
 
   } catch (error) {

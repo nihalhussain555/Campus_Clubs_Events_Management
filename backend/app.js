@@ -9,6 +9,7 @@ import eventRoutes from './routes/eventRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import certificateRoutes from './routes/certificateRoutes.js';
 import agentRoutes from './routes/agentRoutes.js';
+import gamificationRoutes from './routes/gamificationRoutes.js';
 import { sanitizeRequest } from './middleware/sanitize.js';
 
 const app = express();
@@ -53,6 +54,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/agent', agentLimiter, agentRoutes);
+app.use('/api/gamification', gamificationRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });

@@ -86,4 +86,9 @@ const userSchema = new mongoose.Schema({
   
 });
 
+// The leaderboard filters and ranks by department, and every ranking query
+// starts from the set of students in one role.
+userSchema.index({ department: 1 });
+userSchema.index({ role: 1, department: 1 });
+
 export default mongoose.model('User', userSchema);

@@ -21,6 +21,7 @@ const AccountSettings = lazy(() => import('./pages/AccountSettings'));
 const Certificates = lazy(() => import('./pages/Certificates'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const Calendar = lazy(() => import('./pages/Calendar'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 const RouteFallback = () => (
@@ -83,6 +84,12 @@ function App() {
           <Route path="/calendar" element={
             <ProtectedRoute>
               <Calendar />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/leaderboard" element={
+            <ProtectedRoute>
+              <Leaderboard />
             </ProtectedRoute>
           } />
 
