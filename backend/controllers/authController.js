@@ -1,7 +1,9 @@
 import User from '../models/User.js';
+import Club from '../models/Club.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET, JWT_EXPIRES_IN } from '../config/env.js';
+import { normalizeRole } from '../middleware/authMiddleware.js';
 
 const generateToken = (id, role) => {
   return jwt.sign(
@@ -237,6 +239,66 @@ export const login = async (req, res) => {
 // =====================================================
 // GET USER PROFILE
 // =====================================================
+// The profile backs three screens at once - the profile page, account settings
+// and the edit modal - and each writes the response straight back into its own
+// state. One shared shape is what stops a save from silently dropping a
+// leader's clubs or a toggle the user just set.
+const profilePayload = async (user) => {
+  // A leader's identity is defined by the clubs that name them as admin, so the
+  // profile can show what they run instead of only the role string.
+  const ledClubs = await Club.find({ admin: user._id })
+    .select('clubName category department members logo')
+    .sort({ clubName: 1 })
+    .lean();
+
+  return {
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    effectiveRole: normalizeRole(user.role),
+
+    studentId: user.studentId,
+    personalEmail: user.personalEmail,
+
+    department: user.department,
+    year: user.year,
+    semester: user.semester,
+    course: user.course,
+    section: user.section,
+
+    bio: user.bio,
+    gender: user.gender,
+    dob: user.dob,
+    phone: user.phone,
+    address: user.address,
+
+    profilePic: user.profilePic,
+
+    // Read by the account settings toggles. Without them the switches fall back
+    // to "on" and a saved preference looks unset.
+    pushNotifications: user.pushNotifications,
+    eventReminders: user.eventReminders,
+    membershipAlerts: user.membershipAlerts,
+
+    joinedClubs: user.joinedClubs || [],
+    registeredEvents: user.registeredEvents || [],
+
+    // Serialised flat: a profile never needs another club's member list, only
+    // how many members it has.
+    ledClubs: ledClubs.map((club) => ({
+      _id: club._id,
+      clubName: club.clubName,
+      category: club.category,
+      department: club.department,
+      memberCount: (club.members || []).length,
+      logo: club.logo
+    })),
+
+    createdAt: user.createdAt
+  };
+};
+
 export const getUserProfile = async (req, res) => {
   try {
     // req.user.id comes from verifyToken
@@ -251,34 +313,7 @@ export const getUserProfile = async (req, res) => {
     }
 
     res.status(200).json({
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-
-        studentId: user.studentId,
-        personalEmail: user.personalEmail,
-
-        department: user.department,
-        year: user.year,
-        semester: user.semester,
-        course: user.course,
-        section: user.section,
-
-        bio: user.bio,
-        gender: user.gender,
-        dob: user.dob,
-        phone: user.phone,
-        address: user.address,
-
-        profilePic: user.profilePic,
-
-        joinedClubs: user.joinedClubs || [],
-        registeredEvents: user.registeredEvents || [],
-
-        createdAt: user.createdAt
-      }
+      user: await profilePayload(user)
     });
   } catch (error) {
     console.error('Get profile error:', error);
@@ -383,34 +418,7 @@ export const updateProfile = async (req, res) => {
     res.status(200).json({
       message: 'Profile updated successfully',
 
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-
-        studentId: user.studentId,
-        personalEmail: user.personalEmail,
-
-        department: user.department,
-        year: user.year,
-        semester: user.semester,
-        course: user.course,
-        section: user.section,
-
-        bio: user.bio,
-        gender: user.gender,
-        dob: user.dob,
-        phone: user.phone,
-        address: user.address,
-
-        profilePic: user.profilePic,
-
-        joinedClubs: user.joinedClubs || [],
-        registeredEvents: user.registeredEvents || [],
-
-        createdAt: user.createdAt
-      }
+      user: await profilePayload(user)
     });
   } catch (error) {
     console.error('Update profile error:', error);

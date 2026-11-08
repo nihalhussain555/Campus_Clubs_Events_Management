@@ -1851,6 +1851,340 @@ await test('deleting an event announces it without a broken link', async () => {
   assert.ok(!notice.event, 'the notice still points at a deleted event');
 });
 
+// ---------------------------------------------------------------- calendar
+
+await test('the calendar is private', async () => {
+  assert.equal((await call('GET', '/calendar')).status, 401);
+  assert.equal((await call('POST', '/calendar/events', { body: { eventId: clubId } })).status, 401);
+});
+
+await test('saving an event keeps it on the site calendar, not just on disk', async () => {
+  const created = await call('POST', '/events', {
+    token: admin.token,
+    body: {
+      title: 'Bot Battle',
+      description: 'Sumo robots',
+      date: future(48),
+      endDate: future(50),
+      club: clubId,
+    },
+  });
+  const eventId = created.data.event._id;
+
+  const added = await call('POST', '/calendar/events', {
+    token: student.token,
+    body: { eventId },
+  });
+  assert.equal(added.status, 201);
+  assert.equal(added.data.events.length, 1);
+
+  // A double click must not create a second entry.
+  const again = await call('POST', '/calendar/events', {
+    token: student.token,
+    body: { eventId },
+  });
+  assert.equal(again.status, 200);
+  assert.equal(again.data.already, true);
+  assert.equal(again.data.events.length, 1);
+
+  const listed = await call('GET', '/calendar', { token: student.token });
+  assert.equal(listed.status, 200);
+  assert.equal(listed.data.events[0].title, 'Bot Battle');
+  assert.equal(listed.data.events[0].club.clubName, 'Robotics Club');
+
+  const removed = await call('DELETE', `/calendar/events/${eventId}`, {
+    token: student.token,
+  });
+  assert.equal(removed.status, 200);
+  assert.equal(removed.data.events.length, 0);
+
+  await call('DELETE', `/events/${eventId}`, { token: admin.token });
+});
+
+await test('the calendar rejects ids that are not events', async () => {
+  const malformed = await call('POST', '/calendar/events', {
+    token: student.token,
+    body: { eventId: 'not-an-objectid' },
+  });
+  assert.equal(malformed.status, 400);
+
+  const missing = await call('POST', '/calendar/events', {
+    token: student.token,
+    body: { eventId: admin.id },
+  });
+  assert.equal(missing.status, 404);
+});
+
+await test('one student cannot read another student\'s calendar', async () => {
+  const saved = await call('POST', '/calendar/notes', {
+    token: student.token,
+    body: { day: 12, month: 5, year: 2031, text: 'Order banners' },
+  });
+  assert.equal(saved.status, 201);
+
+  const otherView = await call('GET', '/calendar', { token: other.token });
+  assert.equal(otherView.status, 200);
+  assert.equal(otherView.data.notes.length, 0);
+  assert.equal(otherView.data.events.length, 0);
+
+  const foreignNote = await call('DELETE', `/calendar/notes/${saved.data.notes[0].id}`, {
+    token: other.token,
+  });
+  assert.equal(foreignNote.status, 404);
+
+  await call('DELETE', `/calendar/notes/${saved.data.notes[0].id}`, {
+    token: student.token,
+  });
+});
+
+await test('day notes validate their date and text', async () => {
+  const impossible = await call('POST', '/calendar/notes', {
+    token: student.token,
+    body: { day: 30, month: 1, year: 2031, text: 'Feb 30' },
+  });
+  assert.equal(impossible.status, 400);
+
+  const blank = await call('POST', '/calendar/notes', {
+    token: student.token,
+    body: { day: 1, month: 0, year: 2031, text: '    ' },
+  });
+  assert.equal(blank.status, 400);
+
+  const tooLong = await call('POST', '/calendar/notes', {
+    token: student.token,
+    body: { day: 1, month: 0, year: 2031, text: 'x'.repeat(300) },
+  });
+  assert.equal(tooLong.status, 400);
+
+  const saved = await call('POST', '/calendar/notes', {
+    token: student.token,
+    body: { day: 4, month: 6, year: 2031, text: 'Founders day prep' },
+  });
+  assert.equal(saved.status, 201);
+  assert.equal(saved.data.notes.length, 1);
+  assert.equal(saved.data.notes[0].text, 'Founders day prep');
+
+  const dropped = await call('DELETE', `/calendar/notes/${saved.data.notes[0].id}`, {
+    token: student.token,
+  });
+  assert.equal(dropped.status, 200);
+  assert.equal(dropped.data.notes.length, 0);
+});
+
+// ---------------------------------------------------------------- reminders
+
+const { sendUpcomingEventReminders } = await import(
+  '../services/reminderService.js'
+);
+
+const reminderCountFor = async (who, title) => {
+  const inbox = await call('GET', '/notifications', { token: who.token });
+  return inbox.data.notifications.filter(
+    (n) => n.type === 'reminder' && n.title.includes(title)
+  ).length;
+};
+
+await test('attendees are warned thirty minutes ahead, exactly once', async () => {
+  const attendee = await makeUser('Ana Attendee', 'ana@test.dev');
+
+  const created = await call('POST', '/events', {
+    token: admin.token,
+    body: {
+      title: 'Sunrise Hack',
+      description: 'Morning build sprint',
+      date: future(20 / 60),
+      endDate: future(2),
+      club: clubId,
+      location: 'Lab 3',
+    },
+  });
+  const eventId = created.data.event._id;
+
+  await call('POST', `/events/${eventId}/register`, { token: attendee.token });
+
+  const sweep = await sendUpcomingEventReminders();
+  assert.ok(sweep.recipients >= 1, 'nobody was warned');
+  assert.equal(await reminderCountFor(attendee, 'Sunrise Hack'), 1);
+
+  const inbox = await call('GET', '/notifications', { token: attendee.token });
+  const notice = inbox.data.notifications.find((n) => n.type === 'reminder');
+  assert.match(notice.title, /starts in \d+ min/);
+  assert.match(notice.message, /Lab 3/);
+  assert.equal(notice.event._id, eventId);
+
+  // The second pass sees a claimed event and leaves the crowd alone.
+  await sendUpcomingEventReminders();
+  assert.equal(await reminderCountFor(attendee, 'Sunrise Hack'), 1);
+
+  await call('DELETE', `/events/${eventId}`, { token: admin.token });
+});
+
+await test('students who saved an event to their calendar are warned too', async () => {
+  const saver = await makeUser('Sally Saver', 'saver@test.dev');
+
+  const created = await call('POST', '/events', {
+    token: admin.token,
+    body: {
+      title: 'Quiet Reading Room',
+      description: 'Silent study',
+      date: future(25 / 60),
+      endDate: future(2),
+      club: clubId,
+    },
+  });
+  const eventId = created.data.event._id;
+
+  const saved = await call('POST', '/calendar/events', {
+    token: saver.token,
+    body: { eventId },
+  });
+  assert.equal(saved.status, 201);
+
+  // No registration, so only the calendar itself puts them on the list.
+  await sendUpcomingEventReminders();
+  assert.equal(await reminderCountFor(saver, 'Quiet Reading Room'), 1);
+
+  await call('DELETE', `/events/${eventId}`, { token: admin.token });
+});
+
+await test('turning event reminders off in settings is honoured', async () => {
+  const quiet = await makeUser('Qui Quinn', 'quiet@test.dev');
+
+  const opted = await call('PUT', '/auth/profile', {
+    token: quiet.token,
+    body: { eventReminders: false },
+  });
+  assert.equal(opted.status, 200);
+
+  const created = await call('POST', '/events', {
+    token: admin.token,
+    body: {
+      title: 'Surprise Pop-up',
+      description: 'Flash meetup',
+      date: future(15 / 60),
+      endDate: future(1),
+      club: clubId,
+    },
+  });
+  const eventId = created.data.event._id;
+
+  await call('POST', `/events/${eventId}/register`, { token: quiet.token });
+
+  await sendUpcomingEventReminders();
+  assert.equal(await reminderCountFor(quiet, 'Surprise Pop-up'), 0);
+
+  await call('DELETE', `/events/${eventId}`, { token: admin.token });
+});
+
+await test('cancelled and far-off events send no warning', async () => {
+  const cancelled = await call('POST', '/events', {
+    token: admin.token,
+    body: {
+      title: 'Cancelled Cruise',
+      description: 'Called off',
+      date: future(10 / 60),
+      endDate: future(1),
+      club: clubId,
+    },
+  });
+  await call('PUT', `/events/${cancelled.data.event._id}`, {
+    token: admin.token,
+    body: { status: 'cancelled' },
+  });
+
+  const distant = await call('POST', '/events', {
+    token: admin.token,
+    body: {
+      title: 'Winter Gala',
+      description: 'Months away',
+      date: future(48),
+      endDate: future(52),
+      club: clubId,
+    },
+  });
+
+  await sendUpcomingEventReminders();
+  assert.equal(await reminderCountFor(student, 'Cancelled Cruise'), 0);
+  assert.equal(await reminderCountFor(student, 'Winter Gala'), 0);
+
+  // The untouched slot lets the gala warn properly once it does fall due.
+  const stored = await Event.findById(distant.data.event._id).lean();
+  assert.equal(stored.reminderSentAt, null);
+
+  await call('DELETE', `/events/${cancelled.data.event._id}`, { token: admin.token });
+  await call('DELETE', `/events/${distant.data.event._id}`, { token: admin.token });
+});
+
+await test('moving an event re-arms its warning', async () => {
+  const created = await call('POST', '/events', {
+    token: admin.token,
+    body: {
+      title: 'Sliding Symposium',
+      description: 'Time may move',
+      date: future(12 / 60),
+      endDate: future(1),
+      club: clubId,
+    },
+  });
+  const eventId = created.data.event._id;
+
+  await sendUpcomingEventReminders();
+
+  const claimed = await Event.findById(eventId).lean();
+  assert.ok(claimed.reminderSentAt, 'the first warning was not stamped');
+
+  const moved = await call('PUT', `/events/${eventId}`, {
+    token: admin.token,
+    body: { date: future(18 / 60), endDate: future(1) },
+  });
+  assert.equal(moved.status, 200);
+  assert.equal(moved.data.event.reminderSentAt, null);
+
+  await call('DELETE', `/events/${eventId}`, { token: admin.token });
+});
+
+await test('a club leader profile reports the clubs they run', async () => {
+  const before = await call('GET', '/auth/profile', { token: leader.token });
+  assert.equal(before.status, 200);
+  assert.equal(before.data.user.role, 'club_leader');
+  assert.equal(before.data.user.effectiveRole, 'club_leader');
+  assert.deepEqual(
+    before.data.user.ledClubs,
+    [],
+    'a leader with no club reported one anyway'
+  );
+
+  const created = await call('POST', '/clubs', {
+    token: admin.token,
+    body: { clubName: 'Chess Circle', description: 'Board games' },
+  });
+  const clubToHand = created.data.club._id;
+
+  await call('POST', `/clubs/${clubToHand}/join`, { token: leader.token });
+
+  const transferred = await call('PUT', `/clubs/${clubToHand}/transfer-admin`, {
+    token: admin.token,
+    body: { userId: leader.id },
+  });
+  assert.equal(transferred.status, 200);
+
+  const after = await call('GET', '/auth/profile', { token: leader.token });
+  const led = after.data.user.ledClubs;
+  assert.equal(led.length, 1);
+  assert.equal(led[0].clubName, 'Chess Circle');
+  assert.ok(led[0].memberCount >= 1, 'the roster count was not reported');
+
+  // The list is per person: another student's profile never picks up a club
+  // they do not run.
+  const plain = await call('GET', '/auth/profile', { token: student.token });
+  assert.ok(
+    plain.data.user.ledClubs.every((club) => club.clubName !== 'Chess Circle'),
+    "someone else's club leaked into the student profile"
+  );
+
+  await call('DELETE', `/clubs/${clubToHand}`, { token: admin.token });
+});
+
 // ---------------------------------------------------------------- summary
 
 const failed = results.filter((r) => r[0] === 'FAIL');

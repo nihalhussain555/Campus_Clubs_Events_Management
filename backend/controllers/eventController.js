@@ -362,6 +362,7 @@ export const updateEvent = async (req, res) => {
     // Remembered so the campus is only told once about a cancellation, however
     // many later edits the organiser makes to the same event.
     const wasCancelled = event.status === 'cancelled';
+    const previousStart = new Date(event.date);
 
     const {
       title,
@@ -451,6 +452,15 @@ export const updateEvent = async (req, res) => {
       // getCurrentStatus would keep honouring it and an event could never be
       // reopened once cancelled.
       event.status = getCurrentStatus(event, false);
+    }
+
+    // Moving the start time means the warning already sent no longer matches
+    // reality, so the sweep slot is cleared and the new time gets its own.
+    if (
+      event.reminderSentAt &&
+      previousStart.getTime() !== event.date.getTime()
+    ) {
+      event.reminderSentAt = null;
     }
 
     await event.save();

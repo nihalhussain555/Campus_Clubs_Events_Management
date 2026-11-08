@@ -262,6 +262,32 @@ export const eventAPI = {
 };
 
 // =====================================================
+// CALENDAR API
+// =====================================================
+
+// The in-app calendar. Every mutation answers with the caller's full saved
+// events and notes, so the client never needs a second round trip to stay in
+// sync.
+export const calendarAPI = {
+
+  getMyCalendar: () =>
+    api.get('/calendar'),
+
+  saveEvent: (eventId) =>
+    api.post('/calendar/events', { eventId }),
+
+  removeEvent: (eventId) =>
+    api.delete(`/calendar/events/${eventId}`),
+
+  addNote: (note) =>
+    api.post('/calendar/notes', note),
+
+  deleteNote: (noteId) =>
+    api.delete(`/calendar/notes/${noteId}`)
+};
+
+
+// =====================================================
 // CERTIFICATE API
 // =====================================================
 

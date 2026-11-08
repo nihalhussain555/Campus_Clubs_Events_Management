@@ -33,6 +33,14 @@ export const CORS_ORIGINS = (
 export const GROQ_API_KEY = process.env.GROQ_API_KEY;
 export const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 
+// How far ahead of an event's start the attendees are warned. Clamped so a
+// typo in the dashboard cannot make the sweep skip every event or notify for a
+// whole term at once.
+export const EVENT_REMINDER_MINUTES = Math.min(
+  180,
+  Math.max(1, Number(process.env.EVENT_REMINDER_MINUTES) || 30)
+);
+
 export const assertProductionConfig = () => {
   if (!isProduction) return;
 

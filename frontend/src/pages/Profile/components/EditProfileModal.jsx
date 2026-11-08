@@ -1,191 +1,569 @@
-import React, { useState } from 'react';
-import { X, Save, Upload, User, Mail, BookOpen, MapPin, Phone, Hash } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import {
+  BookOpen,
+  Camera,
+  GraduationCap,
+  Save,
+  Trash2,
+  User,
+  X,
+} from 'lucide-react';
+
 import { authAPI } from '../../../services/api';
 import Toast from '../../../components/Toast';
+import {
+  downscaleImage,
+  isSupportedImage,
+  MAX_UPLOAD_BYTES,
+} from '../../../utils/imageUpload';
+
+const GENDERS = ['Male', 'Female', 'Other', 'Prefer not to say'];
+
+// Matches the maxlength on the User schema so the form cannot accept a bio
+// the server would reject.
+const BIO_MAX_LENGTH = 500;
+
+const buildForm = (user = {}) => ({
+  name: user.name || '',
+  personalEmail: user.personalEmail || '',
+  phone: user.phone || '',
+  gender: user.gender || '',
+  dob: user.dob ? new Date(user.dob).toISOString().split('T')[0] : '',
+  address: user.address || '',
+  bio: user.bio || '',
+  studentId: user.studentId || '',
+  department: user.department || '',
+  course: user.course || '',
+  year: user.year || '',
+  semester: user.semester || '',
+  section: user.section || '',
+  profilePic: user.profilePic || '',
+});
 
 const EditProfileModal = ({ user, onClose, onSave }) => {
-  const [formData, setFormData] = useState({
-    name: user.name || '',
-    studentId: user.studentId || '',
-    personalEmail: user.personalEmail || '',
-    department: user.department || '',
-    year: user.year || '',
-    semester: user.semester || '',
-    course: user.course || '',
-    section: user.section || '',
-    bio: user.bio || '',
-    gender: user.gender || '',
-    dob: user.dob ? new Date(user.dob).toISOString().split('T')[0] : '',
-    phone: user.phone || '',
-    address: user.address || '',
-    profilePic: user.profilePic || ''
-  });
-  
+  const [initial] = useState(() => buildForm(user));
+  const [formData, setFormData] = useState(() => buildForm(user));
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+  const fileInputRef = useRef(null);
+
+  const dirty = useMemo(
+    () =>
+      Object.keys(formData).some(
+        (key) => formData[key] !== initial[key],
+      ),
+    [formData, initial],
+  );
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, profilePic: reader.result }));
-      };
-      reader.readAsDataURL(file);
+  const handleImageSelected = async (event) => {
+    const file = event.target.files?.[0];
+
+    // Reset first so choosing the same file twice still fires the change.
+    event.target.value = '';
+
+    if (!file) return;
+
+    if (!isSupportedImage(file)) {
+      setToast({
+        message: 'Please choose a PNG, JPG or WEBP image',
+        type: 'error',
+      });
+
+      return;
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setToast({
+        message: 'That image is over 8 MB. Please choose a smaller one.',
+        type: 'error',
+      });
+
+      return;
+    }
+
+    try {
+      const dataUrl = await downscaleImage(file, 512);
+
+      setFormData((prev) => ({ ...prev, profilePic: dataUrl }));
+
+      setToast({
+        message: 'Image ready. Press Save to apply it.',
+        type: 'success',
+      });
+    } catch (error) {
+      setToast({
+        message: error.message || 'Could not read that image',
+        type: 'error',
+      });
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const removePicture = () => {
+    setFormData((prev) => ({ ...prev, profilePic: '' }));
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
     setLoading(true);
+
     try {
       const response = await authAPI.updateProfile(formData);
+
       onSave(response.data.user);
     } catch (error) {
-      setToast({ message: 'Error updating profile', type: 'error' });
+      setToast({
+        message:
+          error.response?.data?.message ||
+          'Could not save your changes. Please try again.',
+        type: 'error',
+      });
     } finally {
       setLoading(false);
     }
   };
 
+  const initials = (formData.name || '')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join('');
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto">
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl relative flex flex-col my-auto max-h-[90vh]">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-100 shrink-0">
-          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <User className="w-5 h-5 text-indigo-500" /> Edit Profile Details
-          </h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
-            <X className="w-5 h-5" />
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/55 p-4 backdrop-blur-sm sm:items-center sm:p-6">
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* Hidden picker, driven by the Upload button below */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={handleImageSelected}
+        className="hidden"
+      />
+
+      <div className="my-auto flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-[0_30px_100px_rgba(0,0,0,0.28)]">
+
+        {/* ============================ HEADER */}
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-7 sm:py-5">
+
+          <div className="flex items-center gap-3">
+
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#e8f5fb] text-[#145f82]">
+              <User size={18} />
+            </div>
+
+            <div>
+
+              <h2 className="text-base font-black text-slate-900 sm:text-lg">
+                Edit profile
+              </h2>
+
+              <p className="mt-0.5 text-xs text-slate-500">
+                Updates are saved to your account straight away
+              </p>
+
+            </div>
+
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-full p-2 text-slate-500 transition hover:opacity-70"
+          >
+            <X size={20} />
           </button>
+
         </div>
 
-        {/* Body (Scrollable) */}
-        <div className="p-6 overflow-y-auto grow">
-          <form id="edit-profile-form" onSubmit={handleSubmit} className="space-y-8">
-            
-            {/* Profile Picture */}
-            <div>
-              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">Profile Picture</h3>
-              <div className="flex items-center gap-6">
-                <img 
-                  src={formData.profilePic || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII='} 
-                  alt="Profile Preview" 
-                  className="w-20 h-20 rounded-full border-4 border-gray-50 object-cover shadow-sm bg-white"
+        {/* ============================ BODY */}
+        <form
+          id="edit-profile-form"
+          onSubmit={handleSubmit}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+
+          <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-7">
+
+            {/* PROFILE PICTURE */}
+            <SectionHeading
+              icon={<Camera size={14} />}
+              title="Profile photo"
+            />
+
+            <div className="mt-4 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center">
+
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-slate-100 shadow-sm">
+
+                {formData.profilePic ? (
+                  <img
+                    src={formData.profilePic}
+                    alt="Profile preview"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="text-xl font-black text-slate-400">
+                    {initials || <User size={30} />}
+                  </span>
+                )}
+
+              </div>
+
+              <div className="min-w-0 flex-1">
+
+                <p className="text-sm font-bold text-slate-800">
+                  {formData.profilePic
+                    ? 'New photo ready to save'
+                    : 'No photo yet'}
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  PNG, JPG or WEBP up to 8 MB. Large photos are resized to
+                  512px so they load quickly on every device.
+                </p>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="btn-secondary"
+                  >
+                    <Camera size={16} />
+                    Upload photo
+                  </button>
+
+                  {formData.profilePic && (
+                    <button
+                      type="button"
+                      onClick={removePicture}
+                      className="btn-soft"
+                    >
+                      <Trash2 size={16} />
+                      Remove
+                    </button>
+                  )}
+
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* PERSONAL DETAILS */}
+            <div className="mt-8 border-t border-slate-200 pt-6">
+
+              <SectionHeading
+                icon={<User size={14} />}
+                title="Personal details"
+              />
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+
+                <Field
+                  label="Full name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  placeholder="Your name as it should appear"
                 />
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Upload Image</label>
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="file" 
-                      accept="image/*"
-                      onChange={handleImageUpload} 
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm" 
-                    />
+
+                <Field
+                  label="Personal email"
+                  name="personalEmail"
+                  type="email"
+                  value={formData.personalEmail}
+                  onChange={handleChange}
+                  placeholder="you@example.com"
+                  hint="Your college email is managed by the administration."
+                />
+
+                <Field
+                  label="Phone number"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  placeholder="+92 300 0000000"
+                />
+
+                <Field
+                  label="Gender"
+                  name="gender"
+                  value={formData.gender}
+                  onChange={handleChange}
+                  as="select"
+                  options={GENDERS}
+                />
+
+                <Field
+                  label="Date of birth"
+                  name="dob"
+                  type="date"
+                  value={formData.dob}
+                  onChange={handleChange}
+                />
+
+                <Field
+                  label="Address"
+                  name="address"
+                  value={formData.address}
+                  onChange={handleChange}
+                  className="sm:col-span-2"
+                  placeholder="City, area or hostel"
+                />
+
+                <div className="sm:col-span-2">
+
+                  <label className="field-label" htmlFor="edit-bio">
+                    Short bio
+                  </label>
+
+                  <textarea
+                    id="edit-bio"
+                    name="bio"
+                    value={formData.bio}
+                    onChange={handleChange}
+                    rows={3}
+                    maxLength={BIO_MAX_LENGTH}
+                    placeholder="Tell your clubs what you are interested in..."
+                    className="field resize-none"
+                  />
+
+                  <div className="mt-1 flex items-center justify-between gap-3">
+                    <p className="text-[11px] text-slate-500">
+                      Shown on the About Me card of your profile.
+                    </p>
+
+                    <p className="text-[11px] font-bold text-slate-400">
+                      {formData.bio.length} / {BIO_MAX_LENGTH}
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">Select an image from your device.</p>
+
                 </div>
+
               </div>
+
             </div>
 
-            {/* Personal Info */}
-            <div>
-              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4 border-b border-gray-100 pb-2 flex items-center gap-2">
-                 Personal Info
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                  <input name="name" value={formData.name} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Personal Email</label>
-                  <input name="personalEmail" type="email" value={formData.personalEmail} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                  <input name="phone" value={formData.phone} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-                  <select name="gender" value={formData.gender} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white">
-                    <option value="">Select Gender</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                    <option value="Prefer not to say">Prefer not to say</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
-                  <input name="dob" type="date" value={formData.dob} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                  <input name="address" value={formData.address} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Short Bio</label>
-                  <textarea name="bio" value={formData.bio} onChange={handleChange} rows="3" className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm resize-none" placeholder="Tell us about yourself..."></textarea>
-                </div>
+            {/* ACADEMIC DETAILS */}
+            <div className="mt-8 border-t border-slate-200 pt-6">
+
+              <SectionHeading
+                icon={<BookOpen size={14} />}
+                title="Academic details"
+              />
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
+                <Field
+                  label="Student ID"
+                  name="studentId"
+                  value={formData.studentId}
+                  onChange={handleChange}
+                  placeholder="e.g. FA22-BCS-1015"
+                  hint="Used to verify you on the leaderboard."
+                />
+
+                <Field
+                  label="Department"
+                  name="department"
+                  value={formData.department}
+                  onChange={handleChange}
+                  placeholder="e.g. Computer Science"
+                />
+
+                <Field
+                  label="Course"
+                  name="course"
+                  value={formData.course}
+                  onChange={handleChange}
+                  placeholder="e.g. BS Software Engineering"
+                />
+
+                <Field
+                  label="Year"
+                  name="year"
+                  value={formData.year}
+                  onChange={handleChange}
+                  placeholder="e.g. 3rd Year"
+                />
+
+                <Field
+                  label="Semester"
+                  name="semester"
+                  value={formData.semester}
+                  onChange={handleChange}
+                  placeholder="e.g. 6th Semester"
+                />
+
+                <Field
+                  label="Section"
+                  name="section"
+                  value={formData.section}
+                  onChange={handleChange}
+                  placeholder="e.g. B"
+                />
+
               </div>
+
+              <div className="mt-5 flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#e8f5fb] text-[#145f82]">
+                  <GraduationCap size={17} />
+                </div>
+
+                <p className="text-xs leading-5 text-slate-600">
+                  Club membership, event registrations, certificates and your
+                  role are managed by the system. Join or leave a club from the
+                  Clubs page and your profile updates itself.
+                </p>
+
+              </div>
+
             </div>
 
-            {/* Academic Info */}
-            <div>
-              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4 border-b border-gray-100 pb-2 flex items-center gap-2">
-                Academic Info
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Student ID</label>
-                  <input name="studentId" value={formData.studentId} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                  <input name="department" value={formData.department} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
-                  <input name="course" value={formData.course} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                  <input name="year" value={formData.year} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" placeholder="e.g. 3rd Year" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Semester</label>
-                  <input name="semester" value={formData.semester} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" placeholder="e.g. 6th Semester" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
-                  <input name="section" value={formData.section} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm" />
-                </div>
-              </div>
-            </div>
-            
-          </form>
-        </div>
+          </div>
 
-        {/* Footer */}
-        <div className="p-6 border-t border-gray-100 flex items-center justify-end gap-3 shrink-0 bg-gray-50 rounded-b-2xl">
-          <button type="button" onClick={onClose} className="px-5 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">
-            Cancel
-          </button>
-          <button type="submit" form="edit-profile-form" disabled={loading} className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2 shadow-sm">
-            <Save className="w-4 h-4" /> {loading ? 'Saving...' : 'Save Profile'}
-          </button>
-        </div>
+          {/* ============================ FOOTER */}
+          <div className="flex shrink-0 flex-col gap-3 border-t border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+
+            <p className="text-xs font-semibold text-slate-500">
+              {loading
+                ? 'Saving your changes...'
+                : dirty
+                  ? 'You have unsaved changes.'
+                  : 'Everything is up to date.'}
+            </p>
+
+            <div className="flex gap-2">
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                disabled={loading || !dirty}
+                className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Save size={16} />
+                {loading ? 'Saving...' : 'Save changes'}
+              </button>
+
+            </div>
+
+          </div>
+
+        </form>
 
       </div>
+    </div>
+  );
+};
+
+/* ================================================================
+   SECTION HEADING
+================================================================ */
+
+const SectionHeading = ({ icon, title }) => (
+  <div className="flex items-center gap-2">
+
+    <span className="text-[#145f82]">{icon}</span>
+
+    <h3 className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+      {title}
+    </h3>
+
+  </div>
+);
+
+/* ================================================================
+   FIELD
+================================================================ */
+
+const Field = ({
+  label,
+  name,
+  value,
+  onChange,
+  type = 'text',
+  placeholder,
+  hint,
+  required = false,
+  as = 'input',
+  options = [],
+  className = '',
+}) => {
+  const id = `edit-${name}`;
+
+  return (
+    <div className={className}>
+
+      <label className="field-label" htmlFor={id}>
+        {label}
+
+        {required && (
+          <span className="ml-1 text-[#b42318]">*</span>
+        )}
+      </label>
+
+      {as === 'select' ? (
+        <select
+          id={id}
+          name={name}
+          value={value}
+          onChange={onChange}
+          className="field"
+        >
+          <option value="">Not specified</option>
+
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          id={id}
+          name={name}
+          type={type}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          required={required}
+          className="field"
+        />
+      )}
+
+      {hint && (
+        <p className="mt-1 text-[11px] leading-4 text-slate-500">
+          {hint}
+        </p>
+      )}
+
     </div>
   );
 };

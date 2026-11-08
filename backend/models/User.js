@@ -48,6 +48,27 @@ const userSchema = new mongoose.Schema({
       ref: 'Club'
     }
   ],
+  // The in-app calendar. Adding an event from the Events or Calendar page
+  // records the reference here instead of downloading an .ics, so the same
+  // student sees the same plan on every device. The Event collection stays the
+  // single source of truth for the details themselves.
+  calendarEvents: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Event'
+    }
+  ],
+
+  // Day notes, previously localStorage-only and lost on any other browser.
+  calendarNotes: [
+    {
+      day: { type: Number, required: true, min: 1, max: 31 },
+      month: { type: Number, required: true, min: 0, max: 11 },
+      year: { type: Number, required: true, min: 1970, max: 9999 },
+      text: { type: String, required: true, trim: true, maxlength: 240 }
+    }
+  ],
+
   registeredEvents: [
     {
       type: mongoose.Schema.Types.ObjectId,

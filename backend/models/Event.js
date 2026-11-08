@@ -101,11 +101,24 @@ const eventSchema = new mongoose.Schema(
     certificateIssuedAt: {
       type: Date,
       default: null
+    },
+
+    // Stamped by the reminder sweep the moment the pre-start notification is
+    // handed out. Claiming the slot with a conditional write is what keeps a
+    // restart, or a second Render instance, from notifying the same crowd
+    // twice. Moving the event's date clears it so the new time still warns.
+    reminderSentAt: {
+      type: Date,
+      default: null
     }
   },
   {
     timestamps: true
   }
 );
+
+// The reminder sweep reads a date window and skips events it has already
+// notified, so both fields belong in one index.
+eventSchema.index({ date: 1, reminderSentAt: 1 });
 
 export default mongoose.model('Event', eventSchema);

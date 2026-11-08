@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Activity,
   Award,
@@ -20,6 +21,7 @@ import {
   Medal,
   Phone,
   School,
+  ShieldCheck,
   Sparkles,
   Trophy,
   User,
@@ -60,6 +62,7 @@ const ProfilePage = () => {
     course: '',
     section: '',
     role: 'student',
+    ledClubs: [],
     bio: '',
     gender: '',
     dob: '',
@@ -85,6 +88,7 @@ const ProfilePage = () => {
         ...dbUser,
         joinedClubs: dbUser.joinedClubs || [],
         registeredEvents: dbUser.registeredEvents || [],
+        ledClubs: dbUser.ledClubs || [],
       }));
 
       // Keep localStorage updated
@@ -348,6 +352,34 @@ const ProfilePage = () => {
     }
   };
 
+  const roleKey = String(user?.role || 'student').toLowerCase();
+
+  const isAdmin = roleKey === 'admin';
+
+  // Leadership is really the Club.admin link, so someone who runs a club is
+  // shown as the leader they are even if their stored role still reads student.
+  const ledClubs = user?.ledClubs || [];
+
+  const isClubLeader =
+    roleKey === 'club_leader' || ledClubs.length > 0;
+
+  const roleName =
+    isClubLeader && getRoleName(user?.role) === 'Student'
+      ? 'Club Leader'
+      : getRoleName(user?.role);
+
+  const profileKind = isAdmin
+    ? 'Administrator profile'
+    : isClubLeader
+      ? 'Club leader profile'
+      : 'Student profile';
+
+  const roleBadgeClass = isAdmin
+    ? 'border-transparent bg-[#b42318] text-white'
+    : isClubLeader
+      ? 'border-transparent bg-[#2d7a9b] text-white'
+      : 'border-slate-200 bg-white text-slate-700';
+
   // ============================================================
   // PROFILE IMAGE
   // ============================================================
@@ -492,7 +524,7 @@ const ProfilePage = () => {
                   <div className="pb-1">
 
                     <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                      Student Profile
+                      {profileKind}
                     </p>
 
                     <div className="flex flex-wrap items-center gap-3">
@@ -501,8 +533,19 @@ const ProfilePage = () => {
                         {user.name || 'Student'}
                       </h1>
 
-                      <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-600">
-                        {getRoleName(user.role)}
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${roleBadgeClass}`}
+                      >
+                        {isAdmin ? (
+                          <ShieldCheck size={13} />
+                        ) : isClubLeader ? (
+                          <Crown size={13} />
+                        ) : (
+                          <User size={13} />
+                        )}
+
+                        {roleName}
+
                       </span>
 
                     </div>
@@ -546,37 +589,109 @@ const ProfilePage = () => {
           </section>
 
           {/* ==================================================
+              MANAGER STRIP
+
+              Shown only to people who actually run something: the clubs
+              come from Club.admin, so this reflects real responsibility
+              rather than only the role string on the user record.
+          ================================================== */}
+
+          {(isClubLeader || isAdmin) && (
+            <section className="blue-panel mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+              <div className="flex items-start gap-3">
+
+                <div className="icon-tile">
+
+                  {isAdmin ? (
+                    <ShieldCheck size={20} />
+                  ) : (
+                    <Crown size={20} />
+                  )}
+
+                </div>
+
+                <div>
+
+                  <h2 className="text-sm font-black text-slate-900">
+                    {isAdmin
+                      ? 'Administrator access'
+                      : 'Club leader access'}
+                  </h2>
+
+                  <p className="mt-1 max-w-xl text-xs leading-5 text-slate-600">
+                    {isAdmin
+                      ? 'You can manage every club, event and student from the admin dashboard.'
+                      : ledClubs.length > 0
+                        ? `You organise ${ledClubs
+                            .map((club) => club.clubName)
+                            .join(', ')}.`
+                        : 'You are listed as a club leader. As soon as a club names you as its organiser, its dashboard appears here.'}
+                  </p>
+
+                </div>
+
+              </div>
+
+              <Link
+                to={isAdmin ? '/admin' : '/leader'}
+                className="btn-primary shrink-0"
+              >
+                {isAdmin
+                  ? 'Open admin dashboard'
+                  : 'Open leader dashboard'}
+              </Link>
+
+            </section>
+          )}
+
+          {/* ==================================================
               STATISTICS
           ================================================== */}
 
-          <section className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <section
+            className={`mt-6 grid grid-cols-2 gap-4 ${
+              ledClubs.length > 0
+                ? 'lg:grid-cols-5'
+                : 'lg:grid-cols-4'
+            }`}
+          >
 
             <StatCard
               icon={<CalendarDays size={18} />}
               value={registeredEvents.length}
               label="Registered Events"
-              iconClass="bg-blue-50 text-blue-600"
+              iconClass="bg-[#e8f5fb] text-[#145f82]"
             />
 
             <StatCard
               icon={<CheckCircle2 size={18} />}
               value={completedEvents.length}
               label="Events Completed"
-              iconClass="bg-emerald-50 text-emerald-600"
+              iconClass="bg-green-100 text-green-600"
             />
 
             <StatCard
               icon={<Users size={18} />}
               value={clubsJoined}
               label="Clubs Joined"
-              iconClass="bg-violet-50 text-violet-600"
+              iconClass="bg-indigo-50 text-indigo-600"
             />
+
+            {ledClubs.length > 0 && (
+              <StatCard
+                icon={<Crown size={18} />}
+                value={ledClubs.length}
+                label="Clubs Led"
+                iconClass="bg-[#d7edf7] text-[#145f82]"
+              />
+            )}
 
             <StatCard
               icon={<Award size={18} />}
               value={game ? `${earnedBadges.length}/${game.badges.length}` : '-'}
               label="Badges Earned"
-              iconClass="bg-amber-50 text-amber-600"
+              iconClass="bg-slate-100 text-slate-600"
             />
 
           </section>
@@ -763,6 +878,75 @@ const ProfilePage = () => {
                 </div>
 
               </section>
+
+              {/* ==================================================
+                  CLUBS YOU LEAD
+              ================================================== */}
+
+              {ledClubs.length > 0 && (
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+
+                  <SectionHeading
+                    icon={<Crown size={17} />}
+                    title="Clubs you lead"
+                    subtitle="Clubs that name you as their organiser"
+                    count={ledClubs.length}
+                  />
+
+                  <div className="mt-5 space-y-3">
+
+                    {ledClubs.map((club) => (
+
+                      <div
+                        key={club._id}
+                        className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                      >
+
+                        <div className="flex items-start justify-between gap-3">
+
+                          <div className="min-w-0">
+
+                            <p className="truncate text-sm font-black text-slate-800">
+                              {club.clubName}
+                            </p>
+
+                            <p className="mt-1 truncate text-xs text-slate-500">
+                              {club.category || 'General'}
+
+                              {club.department
+                                ? ` • ${club.department}`
+                                : ''}
+
+                            </p>
+
+                          </div>
+
+                          <span className="chip shrink-0">
+
+                            <Users size={12} />
+
+                            {club.memberCount ?? 0}
+
+                          </span>
+
+                        </div>
+
+                      </div>
+
+                    ))}
+
+                    <Link
+                      to="/leader"
+                      className="btn-secondary w-full"
+                    >
+                      <Compass size={16} />
+                      Manage clubs
+                    </Link>
+
+                  </div>
+
+                </section>
+              )}
 
             </div>
 

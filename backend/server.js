@@ -2,6 +2,7 @@ import app from './app.js';
 import connectDB from './config/db.js';
 import { PORT, assertProductionConfig } from './config/env.js';
 import { ensureAchievementCatalog } from './services/xpService.js';
+import { startReminderScheduler } from './services/reminderService.js';
 
 assertProductionConfig();
 
@@ -20,6 +21,10 @@ const start = async () => {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
   });
+
+  // "Starts in 30 minutes" depends on the clock rather than on anyone opening
+  // a page, so the API process owns the sweep.
+  startReminderScheduler();
 };
 
 start();
