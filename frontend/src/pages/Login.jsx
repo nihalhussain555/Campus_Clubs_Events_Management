@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Lock, Mail } from 'lucide-react';
-import { authAPI } from '../services/api';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { GraduationCap, Lock, Mail, ShieldAlert } from 'lucide-react';
+import { authAPI, savePasswordSetupSession } from '../services/api';
 import Toast from '../components/Toast';
 
 const Login = () => {
@@ -15,6 +15,11 @@ const Login = () => {
   const [showToast, setShowToast] = useState(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Set when the API bounced a locked session back to login.
+  const setupNotice =
+    new URLSearchParams(location.search).get('setup') === 'required';
 
   // =====================================================
   // HANDLE INPUT CHANGE
@@ -85,6 +90,28 @@ const Login = () => {
       });
 
       const { token, user } = response.data;
+
+      // MANDATORY FIRST LOGIN: the account still uses a temporary password, so
+      // the backend issued a restricted setup token instead of a session. It
+      // opens the password page and nothing else.
+      if (response.data.passwordSetupRequired) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+
+        savePasswordSetupSession({
+          setupToken: response.data.setupToken,
+          account: {
+            name: response.data.name,
+            email: response.data.email,
+            role: response.data.role,
+            temporaryPasswordExpiresAt:
+              response.data.temporaryPasswordExpiresAt
+          }
+        });
+
+        navigate('/set-new-password', { replace: true });
+        return;
+      }
 
       // Save authentication data
       localStorage.setItem('token', token);
@@ -175,6 +202,18 @@ const Login = () => {
             Login to continue
           </h1>
         </div>
+
+        {/* RETURNED FROM A LOCKED SESSION */}
+        {setupNotice && !error && (
+          <div className="mb-5 flex items-start gap-3 rounded-2xl border border-[#bcddeb] bg-[#e8f5fb] p-4 text-sm font-semibold text-[#145f82]">
+            <ShieldAlert size={18} className="mt-0.5 shrink-0" />
+
+            <span>
+              Your account must set a new password before it can be used. Sign
+              in with your temporary password to continue.
+            </span>
+          </div>
+        )}
 
         {/* ERROR MESSAGE */}
         {error && (

@@ -14,13 +14,24 @@ const api = axios.create({
 });
 
 
+const SETUP_TOKEN_KEY = 'passwordSetupToken';
+const SETUP_ACCOUNT_KEY = 'passwordSetupAccount';
+
+const isPasswordSetupRequest = (url = '') =>
+  url.includes('/auth/complete-password-setup');
+
 // =====================================================
 // ADD TOKEN TO REQUESTS
 // =====================================================
 
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    // While mandatory password setup is in progress there is no session token
+    // at all - only the restricted setup token, which the backend accepts on
+    // this one endpoint and refuses everywhere else.
+    const token = localStorage.getItem(
+      isPasswordSetupRequest(config.url) ? SETUP_TOKEN_KEY : 'token'
+    );
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -49,11 +60,16 @@ api.interceptors.response.use(
     const isAgentRequest =
       requestUrl.includes('/agent/chat');
 
+    // The setup page renders these itself: an expired setup token has to be
+    // explained next to the form, not answered with a silent redirect.
+    const isSetupRequest = isPasswordSetupRequest(requestUrl);
+
     // Only redirect for protected requests
     if (
       status === 401 &&
       !isLoginRequest &&
-      !isAgentRequest
+      !isAgentRequest &&
+      !isSetupRequest
     ) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -61,6 +77,22 @@ api.interceptors.response.use(
       delete api.defaults.headers.common.Authorization;
 
       window.location.href = '/login';
+    }
+
+    // An account locked behind mandatory password setup must not keep browsing
+    // with a half-working session. This happens when an admin regenerates the
+    // password of someone who is signed in.
+    if (
+      status === 403 &&
+      error.response?.data?.code === 'PASSWORD_SETUP_REQUIRED' &&
+      !isSetupRequest
+    ) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+
+      delete api.defaults.headers.common.Authorization;
+
+      window.location.href = '/login?setup=required';
     }
 
     return Promise.reject(error);
@@ -133,7 +165,50 @@ export const authAPI = {
     api.put('/auth/change-password', data),
 
   getAllUsers: () =>
-    api.get('/auth/users')
+    api.get('/auth/users'),
+
+  // Turn a restricted setup token into a real session. The request
+  // interceptor attaches the setup token for this URL automatically.
+  completePasswordSetup: (data) =>
+    api.post('/auth/complete-password-setup', data),
+
+  // Admin: open an account and receive its one-time temporary password.
+  createUser: (data) =>
+    api.post('/auth/users', data),
+
+  // Admin: replace an account's temporary password.
+  regenerateTemporaryPassword: (userId) =>
+    api.post(`/auth/users/${userId}/temporary-password`)
+};
+
+
+// =====================================================
+// PASSWORD SETUP SESSION HELPERS
+// =====================================================
+
+// Login issues this restricted token instead of a session when the account
+// still has to choose its own password.
+export const savePasswordSetupSession = ({ setupToken, account }) => {
+  localStorage.setItem(SETUP_TOKEN_KEY, setupToken);
+  localStorage.setItem(SETUP_ACCOUNT_KEY, JSON.stringify(account || null));
+};
+
+export const readSetupAccount = () => {
+  try {
+    return JSON.parse(
+      localStorage.getItem(SETUP_ACCOUNT_KEY) || 'null'
+    );
+  } catch {
+    return null;
+  }
+};
+
+export const hasPasswordSetupSession = () =>
+  Boolean(localStorage.getItem(SETUP_TOKEN_KEY));
+
+export const clearPasswordSetupSession = () => {
+  localStorage.removeItem(SETUP_TOKEN_KEY);
+  localStorage.removeItem(SETUP_ACCOUNT_KEY);
 };
 
 

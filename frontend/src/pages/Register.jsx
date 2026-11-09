@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Lock, Mail, User } from 'lucide-react';
+import { Check, GraduationCap, Lock, Mail, User, X } from 'lucide-react';
 import { authAPI } from '../services/api';
+import {
+  PASSWORD_REQUIREMENT_TEXT,
+  PASSWORD_RULES,
+  meetsPasswordPolicy
+} from '../utils/passwordPolicy';
 import Toast from '../components/Toast';
 
 const Register = () => {
@@ -46,8 +51,8 @@ const Register = () => {
       return 'Password is required';
     }
 
-    if (formData.password.length < 6) {
-      return 'Password must be at least 6 characters';
+    if (!meetsPasswordPolicy(formData.password)) {
+      return `Password is not strong enough. ${PASSWORD_REQUIREMENT_TEXT}.`;
     }
 
     if (!formData.confirmPassword) {
@@ -275,9 +280,31 @@ const Register = () => {
                 value={formData.password}
                 onChange={handleChange}
                 className="field"
-                placeholder="Min 6 chars"
+                placeholder="8+ chars, Aa, 1, !"
                 required
               />
+
+              {/* The same rules the server applies, checked as you type. */}
+              <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
+                {PASSWORD_RULES.map((rule) => {
+                  const satisfied = rule.test(formData.password);
+
+                  return (
+                    <li
+                      key={rule.id}
+                      className={
+                        satisfied
+                          ? 'flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700'
+                          : 'flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500'
+                      }
+                    >
+                      {satisfied ? <Check size={13} /> : <X size={13} />}
+
+                      {rule.label}
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
 
 

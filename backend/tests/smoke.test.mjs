@@ -57,9 +57,13 @@ const call = async (method, path, { token, body } = {}) => {
   return { status: res.status, data, type };
 };
 
+// Passwords that satisfy the "8 chars, upper, lower, number, special" policy.
+// Declared before the fixtures so makeUser can log in with it.
+const SELF_SERVICE_PW = 'Secret123!';
+
 const makeUser = async (name, email, role) => {
   const signup = await call('POST', '/auth/signup', {
-    body: { name, email, password: 'secret123', department: 'CSE' },
+    body: { name, email, password: SELF_SERVICE_PW, department: 'CSE' },
   });
   assert.equal(signup.status, 201, `signup failed for ${email}`);
 
@@ -68,7 +72,7 @@ const makeUser = async (name, email, role) => {
   }
 
   const login = await call('POST', '/auth/login', {
-    body: { email, password: 'secret123' },
+    body: { email, password: SELF_SERVICE_PW },
   });
   assert.equal(login.status, 200, `login failed for ${email}`);
 
@@ -651,7 +655,7 @@ await test('operator injection in login is stripped, not executed', async () => 
 
 await test('duplicate email is rejected at signup', async () => {
   const { status } = await call('POST', '/auth/signup', {
-    body: { name: 'Copy', email: 'sam@test.dev', password: 'secret123' },
+    body: { name: 'Copy', email: 'sam@test.dev', password: 'Secret123!' },
   });
   assert.equal(status, 400);
 });
@@ -2183,6 +2187,464 @@ await test('a club leader profile reports the clubs they run', async () => {
   );
 
   await call('DELETE', `/clubs/${clubToHand}`, { token: admin.token });
+});
+
+// ------------------------------------------------- temporary password system
+
+const CHOSEN_PW = 'Campus2026!Guide';
+
+let tempPwFor = {};
+
+await test('signup rejects a weak password', async () => {
+  const { status, data } = await call('POST', '/auth/signup', {
+    body: { name: 'Weak', email: 'weak@test.dev', password: 'abcdef' },
+  });
+  assert.equal(status, 400);
+  assert.match(data.message, /uppercase/i);
+  assert.equal(await User.countDocuments({ email: 'weak@test.dev' }), 0);
+});
+
+await test('only admins can create accounts', async () => {
+  for (const token of [student.token, leader.token]) {
+    const { status } = await call('POST', '/auth/users', {
+      token,
+      body: { name: 'Nope', email: 'nope@test.dev' },
+    });
+    assert.equal(status, 403);
+  }
+  assert.equal(await call('POST', '/auth/users', {
+    body: { name: 'Nope', email: 'nope@test.dev' },
+  }).then((r) => r.status), 401);
+});
+
+await test('an admin-created account arrives with a one-time temporary password', async () => {
+  const { status, data } = await call('POST', '/auth/users', {
+    token: admin.token,
+    body: {
+      name: 'Nia New',
+      email: 'nia@test.dev',
+      role: 'student',
+      department: 'CSE',
+    },
+  });
+
+  assert.equal(status, 201);
+
+  const temporary = data.temporaryPassword;
+  tempPwFor.nia = temporary;
+
+  assert.ok(temporary, 'no temporary password was issued');
+  assert.ok(temporary.length >= 8, 'temporary password is too short');
+  assert.equal(data.user.email, 'nia@test.dev');
+  assert.equal(data.user.mustChangePassword, true);
+  assert.equal(data.user.isFirstLogin, true);
+  assert.ok(new Date(data.temporaryPasswordExpiresAt) > new Date());
+
+  // The plaintext travels once, and no hash ever travels. A bcrypt hash is
+  // matched by shape rather than by the bare "$2" prefix, because "$" and "2"
+  // are both legal characters in a temporary password.
+  assert.equal(data.user.password, undefined);
+  assert.ok(!/\$2[aby]\$\d{2}\$/.test(JSON.stringify(data)), 'a bcrypt hash leaked');
+
+  const stored = await User.findOne({ email: 'nia@test.dev' })
+    .select('+password')
+    .lean();
+  assert.equal(stored.password.startsWith('$2'), true, 'password was not hashed');
+  assert.notEqual(stored.password, temporary, 'plaintext was stored');
+});
+
+await test('admin-created accounts cannot have their privileges set by the caller', async () => {
+  const created = await call('POST', '/auth/users', {
+    token: admin.token,
+    body: {
+      name: 'Sneaky',
+      email: 'sneaky@test.dev',
+      role: 'student',
+      password: 'AttackerPw!1',
+      mustChangePassword: false,
+      isFirstLogin: false,
+      joinedClubs: [],
+      registeredEvents: [],
+    },
+  });
+  assert.equal(created.status, 201);
+
+  const stored = await User.findOne({ email: 'sneaky@test.dev' })
+    .select('+password')
+    .lean();
+  assert.notEqual(stored.password, 'AttackerPw!1');
+  assert.equal(stored.password.startsWith('$2'), true);
+  assert.equal(stored.mustChangePassword, true, 'a supplied flag won');
+  assert.equal(stored.isFirstLogin, true, 'a supplied flag won');
+  assert.equal(stored.joinedClubs.length, 0);
+  assert.ok(
+    new Date(stored.temporaryPasswordExpiresAt) > new Date(),
+    'the generated expiry was overridden'
+  );
+
+  await User.deleteOne({ _id: stored._id });
+});
+
+await test('creating an account for an existing email conflicts', async () => {
+  const { status } = await call('POST', '/auth/users', {
+    token: admin.token,
+    body: { name: 'Duplicate', email: 'nia@test.dev' },
+  });
+  assert.equal(status, 409);
+});
+
+await test('an unsupported role is refused', async () => {
+  const { status } = await call('POST', '/auth/users', {
+    token: admin.token,
+    body: { name: 'Tsar', email: 'tsar@test.dev', role: 'super_admin' },
+  });
+  assert.equal(status, 400);
+});
+
+await test('logging in with a temporary password grants no session token', async () => {
+  const { status, data } = await call('POST', '/auth/login', {
+    body: { email: 'nia@test.dev', password: tempPwFor.nia },
+  });
+
+  assert.equal(status, 200);
+  assert.equal(data.passwordSetupRequired, true);
+  assert.equal(data.token, undefined, 'a full session token was issued');
+  assert.equal(data.user, undefined);
+  assert.ok(data.setupToken, 'no setup token was issued');
+  tempPwFor.niaSetupToken = data.setupToken;
+});
+
+await test('a setup token cannot reach any protected endpoint', async () => {
+  // GET /clubs is public by design, so every path here is one verifyToken
+  // actually guards.
+  for (const path of [
+    '/auth/profile',
+    '/calendar',
+    '/gamification/students/me',
+    '/notifications',
+  ]) {
+    const { status, data } = await call('GET', path, {
+      token: tempPwFor.niaSetupToken,
+    });
+    assert.equal(status, 403, `${path} accepted a setup token`);
+    assert.equal(data.code, 'PASSWORD_SETUP_REQUIRED');
+  }
+});
+
+await test('the setup endpoint rejects a normal session token', async () => {
+  const { status } = await call('POST', '/auth/complete-password-setup', {
+    token: student.token,
+    body: { newPassword: CHOSEN_PW },
+  });
+  assert.equal(status, 401);
+});
+
+await test('setup validates strength, confirmation and reuse', async () => {
+  const weak = await call('POST', '/auth/complete-password-setup', {
+    token: tempPwFor.niaSetupToken,
+    body: { newPassword: 'weakpass' },
+  });
+  assert.equal(weak.status, 400);
+  assert.match(weak.data.message, /uppercase|special/i);
+
+  const mismatch = await call('POST', '/auth/complete-password-setup', {
+    token: tempPwFor.niaSetupToken,
+    body: { newPassword: CHOSEN_PW, confirmPassword: 'Different!2026' },
+  });
+  assert.equal(mismatch.status, 400);
+  assert.match(mismatch.data.message, /match/i);
+
+  const reused = await call('POST', '/auth/complete-password-setup', {
+    token: tempPwFor.niaSetupToken,
+    body: { newPassword: tempPwFor.nia },
+  });
+  assert.equal(reused.status, 400);
+  assert.match(reused.data.message, /temporary/i);
+});
+
+await test('completing setup issues a real session and clears the flags', async () => {
+  const { status, data } = await call('POST', '/auth/complete-password-setup', {
+    token: tempPwFor.niaSetupToken,
+    body: { newPassword: CHOSEN_PW, confirmPassword: CHOSEN_PW },
+  });
+
+  assert.equal(status, 200);
+  assert.ok(data.token, 'no session token after setup');
+  assert.equal(data.user.role, 'student');
+
+  const profile = await call('GET', '/auth/profile', { token: data.token });
+  assert.equal(profile.status, 200);
+  assert.equal(profile.data.user.email, 'nia@test.dev');
+
+  const stored = await User.findOne({ email: 'nia@test.dev' })
+    .select('+password')
+    .lean();
+  assert.equal(stored.mustChangePassword, false);
+  assert.equal(stored.isFirstLogin, false);
+  assert.equal(stored.temporaryPasswordExpiresAt, null);
+  assert.ok(stored.passwordChangedAt instanceof Date);
+
+  // The temporary password is gone for good.
+  const replay = await call('POST', '/auth/login', {
+    body: { email: 'nia@test.dev', password: tempPwFor.nia },
+  });
+  assert.equal(replay.status, 401);
+
+  const stillValid = await call('POST', '/auth/login', {
+    body: { email: 'nia@test.dev', password: CHOSEN_PW },
+  });
+  assert.equal(stillValid.status, 200);
+  assert.equal(stillValid.data.passwordSetupRequired, undefined);
+
+  // The spent setup token no longer works either.
+  const spent = await call('POST', '/auth/complete-password-setup', {
+    token: tempPwFor.niaSetupToken,
+    body: { newPassword: 'Another2026!x' },
+  });
+  assert.equal(spent.status, 401);
+});
+
+await test('an expired temporary password is rejected at login and at setup', async () => {
+  const created = await call('POST', '/auth/users', {
+    token: admin.token,
+    body: { name: 'Raj Late', email: 'raj@test.dev', role: 'student' },
+  });
+  assert.equal(created.status, 201);
+  tempPwFor.raj = created.data.temporaryPassword;
+
+  // A setup token issued while the password was still valid.
+  const gate = await call('POST', '/auth/login', {
+    body: { email: 'raj@test.dev', password: tempPwFor.raj },
+  });
+  assert.equal(gate.status, 200);
+  assert.equal(gate.data.passwordSetupRequired, true);
+
+  await User.updateOne(
+    { email: 'raj@test.dev' },
+    { $set: { temporaryPasswordExpiresAt: new Date(Date.now() - 60000) } }
+  );
+
+  // The hash still matches, so expiry has to be checked explicitly.
+  const late = await call('POST', '/auth/login', {
+    body: { email: 'raj@test.dev', password: tempPwFor.raj },
+  });
+  assert.equal(late.status, 401);
+  assert.match(late.data.message, /expired/i);
+
+  const lateSetup = await call('POST', '/auth/complete-password-setup', {
+    token: gate.data.setupToken,
+    body: { newPassword: CHOSEN_PW },
+  });
+  assert.equal(lateSetup.status, 401);
+  assert.match(lateSetup.data.message, /expired/i);
+
+  const stored = await User.findOne({ email: 'raj@test.dev' })
+    .select('+password')
+    .lean();
+  assert.equal(stored.mustChangePassword, true, 'expiry unlocked the account');
+});
+
+await test('regenerating a temporary password invalidates the previous one', async () => {
+  const created = await call('POST', '/auth/users', {
+    token: admin.token,
+    body: { name: 'Oss Old', email: 'oss@test.dev', role: 'student' },
+  });
+  assert.equal(created.status, 201);
+
+  const ossId = created.data.user.id;
+  const supersededExpiry = new Date(created.data.temporaryPasswordExpiresAt);
+
+  const issued = await call(
+    'POST',
+    `/auth/users/${ossId}/temporary-password`,
+    { token: admin.token }
+  );
+  assert.equal(issued.status, 200);
+  const fresh = issued.data.temporaryPassword;
+  assert.ok(fresh, 'no replacement password was issued');
+  assert.notEqual(fresh, created.data.temporaryPassword);
+  assert.ok(
+    new Date(issued.data.temporaryPasswordExpiresAt) >= supersededExpiry,
+    'the expiry was not pushed forward'
+  );
+  assert.ok(!/\$2[aby]\$\d{2}\$/.test(JSON.stringify(issued)));
+
+  // The password the user was given first is dead, even though it is a valid
+  // shape and the account still demands setup.
+  const stale = await call('POST', '/auth/login', {
+    body: { email: 'oss@test.dev', password: created.data.temporaryPassword },
+  });
+  assert.equal(stale.status, 401);
+  assert.match(stale.data.message, /invalid/i);
+
+  const current = await call('POST', '/auth/login', {
+    body: { email: 'oss@test.dev', password: fresh },
+  });
+  assert.equal(current.status, 200);
+  assert.equal(current.data.passwordSetupRequired, true);
+});
+
+await test('regeneration ends a live session and re-arms mandatory setup', async () => {
+  const victim = await makeUser('Victor Live', 'victor@test.dev');
+
+  const before = await call('GET', '/auth/profile', { token: victim.token });
+  assert.equal(before.status, 200);
+
+  const issued = await call('POST', `/auth/users/${victim.id}/temporary-password`, {
+    token: admin.token,
+  });
+  assert.equal(issued.status, 200);
+  assert.ok(issued.data.temporaryPassword);
+
+  // Same password, valid hash, but the account is locked behind setup again.
+  const knownPassword = await call('POST', '/auth/login', {
+    body: { email: 'victor@test.dev', password: SELF_SERVICE_PW },
+  });
+  assert.equal(knownPassword.status, 401, 'the old password still worked');
+
+  const revoked = await call('GET', '/auth/profile', { token: victim.token });
+  assert.equal(revoked.status, 403);
+  assert.equal(revoked.data.code, 'PASSWORD_SETUP_REQUIRED');
+
+  const gate = await call('GET', '/auth/users', { token: victim.token });
+  assert.equal(gate.status, 403, 'a locked session reached an admin route');
+
+  const fresh = await call('POST', '/auth/login', {
+    body: { email: 'victor@test.dev', password: issued.data.temporaryPassword },
+  });
+  assert.equal(fresh.status, 200);
+  assert.equal(fresh.data.passwordSetupRequired, true);
+
+  const done = await call('POST', '/auth/complete-password-setup', {
+    token: fresh.data.setupToken,
+    body: { newPassword: CHOSEN_PW },
+  });
+  assert.equal(done.status, 200);
+
+  const after = await call('GET', '/auth/profile', { token: done.data.token });
+  assert.equal(after.status, 200);
+});
+
+await test('an admin cannot reset their own temporary password', async () => {
+  const { status, data } = await call(
+    'POST',
+    `/auth/users/${admin.id}/temporary-password`,
+    { token: admin.token }
+  );
+  assert.equal(status, 400);
+  assert.match(data.message, /your own/i);
+});
+
+await test('regenerating for an unknown or malformed id fails cleanly', async () => {
+  const missing = await call(
+    'POST',
+    '/auth/users/64f0a0b0a0b0a0b0a0b0a0b0/temporary-password',
+    { token: admin.token }
+  );
+  assert.equal(missing.status, 404);
+
+  const malformed = await call(
+    'POST',
+    '/auth/users/not-an-id/temporary-password',
+    { token: admin.token }
+  );
+  assert.equal(malformed.status, 400);
+});
+
+await test('leader and admin accounts created by an admin complete setup and work', async () => {
+  for (const role of ['club_leader', 'admin']) {
+    const email = `${role.replace('_', '')}@created.test.dev`;
+
+    const created = await call('POST', '/auth/users', {
+      token: admin.token,
+      body: { name: `${role} Account`, email, role },
+    });
+    assert.equal(created.status, 201, `${role} creation failed`);
+    assert.equal(created.data.user.role, role);
+
+    const gate = await call('POST', '/auth/login', {
+      body: { email, password: created.data.temporaryPassword },
+    });
+    assert.equal(gate.status, 200);
+    assert.equal(gate.data.passwordSetupRequired, true, `${role} got a session`);
+
+    const done = await call('POST', '/auth/complete-password-setup', {
+      token: gate.data.setupToken,
+      body: { newPassword: CHOSEN_PW },
+    });
+    assert.equal(done.status, 200);
+    assert.equal(done.data.user.role, role);
+
+    const profile = await call('GET', '/auth/profile', { token: done.data.token });
+    assert.equal(profile.status, 200);
+
+    const privileged = await call(
+      'GET',
+      role === 'admin' ? '/auth/users' : '/gamification/students/me',
+      { token: done.data.token }
+    );
+    assert.equal(privileged.status, 200, `${role} lost their permissions`);
+  }
+});
+
+await test('the admin user list reports password setup status', async () => {
+  const { status, data } = await call('GET', '/auth/users', {
+    token: admin.token,
+  });
+  assert.equal(status, 200);
+
+  const nia = data.users.find((user) => user.email === 'nia@test.dev');
+  const raj = data.users.find((user) => user.email === 'raj@test.dev');
+
+  assert.equal(nia.mustChangePassword, false, 'setup completion was not visible');
+  assert.equal(nia.temporaryPasswordExpiresAt, null);
+  assert.equal(raj.mustChangePassword, true, 'pending setup was not visible');
+  assert.equal(raj.password, undefined, 'the admin list leaked a password');
+  assert.ok(
+    !/\$2[aby]\$\d{2}\$/.test(JSON.stringify(data)),
+    'a bcrypt hash leaked in the user list'
+  );
+});
+
+await test('changing a password returns a token that still works', async () => {
+  const mover = await makeUser('Mira Mover', 'mover@test.dev');
+
+  // passwordChangedAt is compared against token iat, which has one-second
+  // resolution, so the session under test must predate a whole second.
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+
+  const weak = await call('PUT', '/auth/change-password', {
+    token: mover.token,
+    body: { currentPassword: SELF_SERVICE_PW, newPassword: 'short' },
+  });
+  assert.equal(weak.status, 400);
+
+  const same = await call('PUT', '/auth/change-password', {
+    token: mover.token,
+    body: { currentPassword: SELF_SERVICE_PW, newPassword: SELF_SERVICE_PW },
+  });
+  assert.equal(same.status, 400);
+
+  const changed = await call('PUT', '/auth/change-password', {
+    token: mover.token,
+    body: { currentPassword: SELF_SERVICE_PW, newPassword: CHOSEN_PW },
+  });
+  assert.equal(changed.status, 200);
+  assert.ok(changed.data.token, 'no refreshed token was returned');
+
+  const refreshed = await call('GET', '/auth/profile', {
+    token: changed.data.token,
+  });
+  assert.equal(refreshed.status, 200, 'the refreshed token was rejected');
+
+  const stale = await call('GET', '/auth/profile', { token: mover.token });
+  assert.equal(stale.status, 401, 'the pre-change token still worked');
+
+  const login = await call('POST', '/auth/login', {
+    body: { email: 'mover@test.dev', password: CHOSEN_PW },
+  });
+  assert.equal(login.status, 200);
+  assert.equal(login.data.passwordSetupRequired, undefined);
 });
 
 // ---------------------------------------------------------------- summary

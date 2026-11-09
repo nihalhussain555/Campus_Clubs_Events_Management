@@ -7,10 +7,13 @@ import {
   Bell,
   Briefcase,
   Calendar,
+  Check,
   CheckCircle2,
   ChevronRight,
   Clock,
+  Copy,
   Download,
+  KeyRound,
   MapPin,
   Medal,
   Plus,
@@ -21,6 +24,7 @@ import {
   Trash2,
   Trophy,
   Undo2,
+  UserPlus,
   Users,
   X,
 } from 'lucide-react';
@@ -40,6 +44,49 @@ import AnalyticsCharts from '../components/AnalyticsCharts';
 import { getEventStatus } from '../utils/eventStatus';
 import { withInstantTimes } from '../utils/eventTime';
 import { ACTIVITY_OPTIONS } from '../utils/activityTypes';
+
+// Password setup status for the users table. mustChangePassword is the
+// server-side flag: it is true from the moment an account is created until the
+// holder finishes the mandatory Set New Password page.
+const credentialStatus = (user) => {
+  if (!user.mustChangePassword) {
+    return {
+      label: 'Active',
+      detail: 'Own password set',
+      className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      Icon: CheckCircle2,
+    };
+  }
+
+  const expiresAt = user.temporaryPasswordExpiresAt
+    ? new Date(user.temporaryPasswordExpiresAt)
+    : null;
+
+  if (!expiresAt) {
+    return {
+      label: 'Awaiting first login',
+      detail: 'Temporary password issued',
+      className: 'bg-amber-50 text-amber-700 border-amber-200',
+      Icon: Clock,
+    };
+  }
+
+  if (expiresAt.getTime() <= Date.now()) {
+    return {
+      label: 'Link expired',
+      detail: `Expired ${expiresAt.toLocaleString()}`,
+      className: 'bg-red-50 text-red-700 border-red-200',
+      Icon: AlertTriangle,
+    };
+  }
+
+  return {
+    label: 'Awaiting first login',
+    detail: `Temporary password valid until ${expiresAt.toLocaleString()}`,
+    className: 'bg-amber-50 text-amber-700 border-amber-200',
+    Icon: Clock,
+  };
+};
 
 const XP_TYPE_LABELS = {
   event_attendance: 'Event attendance',
@@ -111,6 +158,30 @@ const AdminPanel = () => {
 
   // Destructive action waiting for confirmation
   const [pendingAction, setPendingAction] = useState(null);
+
+  // Account creation and temporary credentials
+  const [showAccountForm, setShowAccountForm] = useState(false);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [resetBusyId, setResetBusyId] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [issuedCredential, setIssuedCredential] = useState(null);
+  const [newAccount, setNewAccount] = useState({
+    name: '',
+    email: '',
+    role: 'student',
+    studentId: '',
+    department: '',
+  });
+
+  // Used only to hide the reset button for the signed-in administrator:
+  // regenerating your own temporary password would lock you out mid-session.
+  const [currentAdminId] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}')?.id || null;
+    } catch {
+      return null;
+    }
+  });
 
   const [newClub, setNewClub] = useState({
     clubName: '',
@@ -225,6 +296,158 @@ const AdminPanel = () => {
   useEffect(() => {
     fetchAdminData(true);
   }, []);
+
+  // --------------------------------------------------
+  // ACCOUNTS AND TEMPORARY CREDENTIALS
+  // --------------------------------------------------
+
+  const ACCOUNT_ROLES = [
+    { value: 'student', label: 'Student' },
+    { value: 'club_leader', label: 'Club leader' },
+    { value: 'admin', label: 'Administrator' },
+  ];
+
+  const updateNewAccount = (field) => (event) =>
+    setNewAccount((prev) => ({
+      ...prev,
+      [field]: event.target.value,
+    }));
+
+  const handleCreateAccount = async (event) => {
+    event.preventDefault();
+
+    const name = newAccount.name.trim();
+    const email = newAccount.email.trim().toLowerCase();
+
+    if (!name || !email) {
+      setToast({
+        message: 'A name and college email are required',
+        type: 'error',
+      });
+
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setToast({ message: 'Enter a valid email address', type: 'error' });
+      return;
+    }
+
+    const payload = { name, email, role: newAccount.role };
+
+    if (newAccount.studentId.trim()) {
+      payload.studentId = newAccount.studentId.trim();
+    }
+
+    if (newAccount.department.trim()) {
+      payload.department = newAccount.department.trim();
+    }
+
+    try {
+      setAccountBusy(true);
+
+      const { data } = await authAPI.createUser(payload);
+
+      setIssuedCredential({
+        name: data.user.name,
+        email: data.user.email,
+        role: data.user.role,
+        temporaryPassword: data.temporaryPassword,
+        expiresAt: data.temporaryPasswordExpiresAt,
+      });
+
+      setCopied(false);
+      setShowAccountForm(false);
+
+      setNewAccount({
+        name: '',
+        email: '',
+        role: 'student',
+        studentId: '',
+        department: '',
+      });
+
+      setToast({
+        message: `${data.user.name} can now sign in with the temporary password`,
+        type: 'success',
+      });
+
+      await fetchAdminData(false);
+    } catch (error) {
+      setToast({
+        message:
+          error.response?.data?.message ||
+          'Unable to create that account',
+        type: 'error',
+      });
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  // Confirmation first: this replaces the password the person may already
+  // hold and ends any session they have open.
+  const requestTemporaryReset = (user) => {
+    setPendingAction({
+      title: 'Issue a new temporary password?',
+      message:
+        `${user.name} (${user.email}) will not be able to sign in with the ` +
+        'password they have now, and any session they are using will be ' +
+        'ended. The new password is shown once, here only.',
+      confirmLabel: 'Generate password',
+      run: async () => {
+        try {
+          setResetBusyId(user._id);
+
+          const { data } = await authAPI.regenerateTemporaryPassword(user._id);
+
+          setIssuedCredential({
+            name: data.user.name,
+            email: data.user.email,
+            role: data.user.role,
+            temporaryPassword: data.temporaryPassword,
+            expiresAt: data.temporaryPasswordExpiresAt,
+          });
+
+          setCopied(false);
+
+          setToast({
+            message: `New temporary password issued for ${data.user.name}`,
+            type: 'success',
+          });
+
+          await fetchAdminData(false);
+        } catch (error) {
+          setToast({
+            message:
+              error.response?.data?.message ||
+              'Unable to issue a new password',
+            type: 'error',
+          });
+        } finally {
+          setResetBusyId(null);
+        }
+      },
+    });
+  };
+
+  const copyTemporaryPassword = async () => {
+    const value = issuedCredential?.temporaryPassword || '';
+
+    try {
+      await navigator.clipboard.writeText(value);
+
+      setCopied(true);
+
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setToast({
+        message: 'Your browser blocked copying. Select the text and copy it ' +
+          'manually instead.',
+        type: 'error',
+      });
+    }
+  };
 
   // --------------------------------------------------
   // GAMIFICATION DATA
@@ -1544,32 +1767,306 @@ const AdminPanel = () => {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    View all registered campus users.
+                    View all registered campus users and issue temporary
+                    passwords.
                   </p>
                 </div>
 
-                <div className="relative w-full sm:w-80">
-                  <Search
-                    size={17}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
 
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) =>
-                      setSearch(e.target.value)
+                  <div className="relative w-full sm:w-72">
+                    <Search
+                      size={17}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) =>
+                        setSearch(e.target.value)
+                      }
+                      placeholder="Search users..."
+                      className="field w-full pl-10"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowAccountForm((prev) => !prev)
                     }
-                    placeholder="Search users..."
-                    className="field w-full pl-10"
-                  />
+                    className="btn-primary flex items-center justify-center gap-2 whitespace-nowrap"
+                  >
+                    <UserPlus size={17} />
+
+                    {showAccountForm
+                      ? 'Close form'
+                      : 'Create account'}
+                  </button>
+
                 </div>
 
               </div>
 
+              {/* --------------------------------------------------
+                  ONE-TIME CREDENTIAL
+                  The password exists in this browser only until the card is
+                  dismissed: the server keeps just the bcrypt hash.
+              -------------------------------------------------- */}
+
+              {issuedCredential && (
+                <div className="modal-card border-[#bcddeb]">
+
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+
+                    <div>
+                      <p className="eyebrow mb-2">
+                        Temporary password
+                      </p>
+
+                      <h3 className="text-xl font-black text-black">
+                        {issuedCredential.name}
+                      </h3>
+
+                      <p className="mt-1 text-sm text-slate-600">
+                        {issuedCredential.email}
+
+                        <span className="chip ml-2 capitalize">
+                          {issuedCredential.role?.replace('_', ' ')}
+                        </span>
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIssuedCredential(null)}
+                      aria-label="Dismiss temporary password"
+                      className="self-start rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-black"
+                    >
+                      <X size={18} />
+                    </button>
+
+                  </div>
+
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+
+                    <input
+                      readOnly
+                      value={issuedCredential.temporaryPassword}
+                      onFocus={(e) => e.target.select()}
+                      aria-label="Temporary password"
+                      className="field flex-1 font-mono text-base font-bold tracking-wider"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={copyTemporaryPassword}
+                      className="btn-secondary flex items-center justify-center gap-2 whitespace-nowrap"
+                    >
+                      {copied ? <Check size={17} /> : <Copy size={17} />}
+
+                      {copied ? 'Copied' : 'Copy password'}
+                    </button>
+
+                  </div>
+
+                  <div className="mt-4 space-y-2 text-xs leading-5 text-slate-600">
+                    <p className="flex items-start gap-2 font-semibold text-[#145f82]">
+                      <KeyRound size={15} className="mt-0.5 shrink-0" />
+
+                      <span>
+                        This is the only time it is shown. Only an encrypted
+                        copy is stored, and it stops working once the student
+                        sets their own password.
+                      </span>
+                    </p>
+
+                    <p className="flex items-start gap-2">
+                      <Clock size={15} className="mt-0.5 shrink-0" />
+
+                      <span>
+                        {issuedCredential.expiresAt
+                          ? `Expires ${new Date(
+                              issuedCredential.expiresAt
+                            ).toLocaleString()}.`
+                          : 'No expiry recorded for this password.'}
+                      </span>
+                    </p>
+
+                    <p className="flex items-start gap-2">
+                      <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+
+                      <span>
+                        Share it over a channel you trust with that person -
+                        not in a public group. They must change it at first
+                        login before any dashboard opens.
+                      </span>
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIssuedCredential(null)}
+                    className="btn-primary mt-5 w-full sm:w-auto"
+                  >
+                    I have shared it
+                  </button>
+
+                </div>
+              )}
+
+              {/* --------------------------------------------------
+                  CREATE ACCOUNT
+              -------------------------------------------------- */}
+
+              {showAccountForm && (
+                <form
+                  onSubmit={handleCreateAccount}
+                  className="app-card"
+                >
+
+                  <div className="mb-5">
+                    <h3 className="text-xl font-black text-black">
+                      New account
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      A temporary password is generated for the person to sign
+                      in with. They choose their own before seeing anything
+                      else.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+
+                    <div>
+                      <label className="field-label">
+                        Full name *
+                      </label>
+
+                      <input
+                        type="text"
+                        value={newAccount.name}
+                        onChange={updateNewAccount('name')}
+                        className="field"
+                        placeholder="As it appears on the register"
+                        autoComplete="off"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="field-label">
+                        College email *
+                      </label>
+
+                      <input
+                        type="email"
+                        value={newAccount.email}
+                        onChange={updateNewAccount('email')}
+                        className="field"
+                        placeholder="name@college.edu"
+                        autoComplete="off"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="field-label">
+                        Role *
+                      </label>
+
+                      <select
+                        value={newAccount.role}
+                        onChange={updateNewAccount('role')}
+                        className="field"
+                      >
+                        {ACCOUNT_ROLES.map((option) => (
+                          <option
+                            key={option.value}
+                            value={option.value}
+                          >
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <p className="mt-2 text-xs text-slate-500">
+                        Creating an administrator is recorded in the audit log.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="field-label">
+                        Student or staff id
+                      </label>
+
+                      <input
+                        type="text"
+                        value={newAccount.studentId}
+                        onChange={updateNewAccount('studentId')}
+                        className="field"
+                        placeholder="Optional"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="field-label">
+                        Department
+                      </label>
+
+                      <input
+                        type="text"
+                        value={newAccount.department}
+                        onChange={updateNewAccount('department')}
+                        className="field"
+                        placeholder="Optional - used by the leaderboard filters"
+                      />
+                    </div>
+
+                  </div>
+
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+                    <p className="text-xs text-slate-500">
+                      You will not choose their password here - the system
+                      generates one and shows it once.
+                    </p>
+
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowAccountForm(false)}
+                        className="btn-secondary"
+                      >
+                        Cancel
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={accountBusy}
+                        className="btn-primary flex items-center gap-2"
+                      >
+                        {accountBusy && (
+                          <RefreshCw
+                            size={16}
+                            className="animate-spin"
+                          />
+                        )}
+
+                        {accountBusy
+                          ? 'Creating...'
+                          : 'Create and show password'}
+                      </button>
+                    </div>
+
+                  </div>
+
+                </form>
+              )}
+
               <div className="table-shell overflow-x-auto">
 
-                <table className="w-full min-w-[800px]">
+                <table className="w-full min-w-[1000px]">
 
                   <thead className="table-head">
                     <tr>
@@ -1592,6 +2089,14 @@ const AdminPanel = () => {
                       <th className="table-cell text-left">
                         Joined
                       </th>
+
+                      <th className="table-cell text-left">
+                        Password setup
+                      </th>
+
+                      <th className="table-cell text-right">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
 
@@ -1600,14 +2105,21 @@ const AdminPanel = () => {
                     {filteredUsers.length === 0 ? (
                       <tr>
                         <td
-                          colSpan="5"
+                          colSpan="7"
                           className="p-12 text-center text-sm text-slate-500"
                         >
                           No users found.
                         </td>
                       </tr>
                     ) : (
-                      filteredUsers.map((user) => (
+                      filteredUsers.map((user) => {
+                        const status = credentialStatus(user);
+
+                        const isSelf =
+                          currentAdminId &&
+                          String(user._id) === String(currentAdminId);
+
+                        return (
                         <tr
                           key={user._id}
                           className="transition hover:bg-slate-50"
@@ -1657,8 +2169,56 @@ const AdminPanel = () => {
                               : '—'}
                           </td>
 
+                          <td className="table-cell">
+                            <span
+                              className={`chip inline-flex items-center gap-1.5 border ${status.className}`}
+                            >
+                              <status.Icon size={13} />
+
+                              {status.label}
+                            </span>
+
+                            <p className="mt-1.5 text-xs text-slate-500">
+                              {status.detail}
+                            </p>
+                          </td>
+
+                          <td className="table-cell text-right">
+                            {isSelf ? (
+                              <span className="text-xs text-slate-500">
+                                This is you
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  requestTemporaryReset(user)
+                                }
+                                disabled={
+                                  resetBusyId === user._id
+                                }
+                                title="Replace this account's password with a new temporary one"
+                                className="btn-secondary inline-flex items-center gap-2 px-3 py-2 text-xs disabled:opacity-60"
+                              >
+                                {resetBusyId === user._id ? (
+                                  <RefreshCw
+                                    size={14}
+                                    className="animate-spin"
+                                  />
+                                ) : (
+                                  <KeyRound size={14} />
+                                )}
+
+                                {resetBusyId === user._id
+                                  ? 'Issuing...'
+                                  : 'New temp password'}
+                              </button>
+                            )}
+                          </td>
+
                         </tr>
-                      ))
+                        );
+                      })
                     )}
 
                   </tbody>

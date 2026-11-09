@@ -41,6 +41,19 @@ export const EVENT_REMINDER_MINUTES = Math.min(
   Math.max(1, Number(process.env.EVENT_REMINDER_MINUTES) || 30)
 );
 
+// How long an admin-issued temporary password stays usable. Clamped to 1-168
+// hours so a typo cannot make credentials permanent or instantly expired.
+export const TEMP_PASSWORD_TTL_HOURS = Math.min(
+  168,
+  Math.max(1, Number(process.env.TEMP_PASSWORD_TTL_HOURS) || 24)
+);
+
+// Lifetime of the restricted token handed out when mustChangePassword is true.
+// It only unlocks the password-setup endpoint, so it is kept far shorter than
+// the session token.
+export const PASSWORD_SETUP_TOKEN_TTL =
+  process.env.PASSWORD_SETUP_TOKEN_TTL || '15m';
+
 export const assertProductionConfig = () => {
   if (!isProduction) return;
 

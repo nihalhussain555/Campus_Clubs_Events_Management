@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { ShieldAlert } from 'lucide-react';
-import { authAPI } from '../services/api';
+import { authAPI, hasPasswordSetupSession } from '../services/api';
 
 // Mirrors the backend's EFFECTIVE_ROLE map: accounts created before club
 // leaders existed still carry 'club_member'.
@@ -33,6 +33,7 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [wrongRole, setWrongRole] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
   const [user, setUser] = useState(null);
 
   useEffect(() => {
@@ -40,6 +41,10 @@ const ProtectedRoute = ({ children, requiredRole }) => {
       const token = localStorage.getItem('token');
 
       if (!token) {
+        // Halfway through mandatory password setup: the only credential held
+        // is the restricted setup token, so the password page is the single
+        // destination.
+        setNeedsSetup(hasPasswordSetupSession());
         setAuthorized(false);
         setLoading(false);
         return;
@@ -101,6 +106,11 @@ const ProtectedRoute = ({ children, requiredRole }) => {
         </div>
       </div>
     );
+  }
+
+  // Waiting on a password before anything else can be shown.
+  if (needsSetup) {
+    return <Navigate to="/set-new-password" replace />;
   }
 
   // Not logged in

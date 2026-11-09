@@ -99,6 +99,26 @@ const userSchema = new mongoose.Schema({
   eventReminders: { type: Boolean, default: true },
   membershipAlerts: { type: Boolean, default: true },
 
+  // ---------------- Account setup / temporary credentials ----------------
+  // Defaults are all "nothing special" so every record that predates this
+  // feature keeps logging in exactly as before: a missing flag reads as false
+  // and an absent expiry reads as "no temporary password pending".
+  isFirstLogin: { type: Boolean, default: false },
+  mustChangePassword: { type: Boolean, default: false },
+
+  // Truncated to the second because JWT iat claims carry no sub-second
+  // precision: verifyToken compares the two to decide whether a token predates
+  // the last password change, and an untruncated value would revoke the token
+  // issued in the very same second.
+  passwordChangedAt: {
+    type: Date,
+    default: () => new Date(Math.floor(Date.now() / 1000) * 1000)
+  },
+
+  // Set only while an admin-issued temporary password is outstanding. The
+  // plaintext itself is never stored - only its bcrypt hash in `password`.
+  temporaryPasswordExpiresAt: { type: Date, default: null },
+
   createdAt: {
     type: Date,
     default: Date.now
@@ -111,5 +131,13 @@ const userSchema = new mongoose.Schema({
 // starts from the set of students in one role.
 userSchema.index({ department: 1 });
 userSchema.index({ role: 1, department: 1 });
+
+// True while an admin-issued temporary password is still usable. Records that
+// predate the field have no expiry, so they are treated as ordinary accounts
+// rather than locked ones.
+userSchema.methods.hasActiveTemporaryPassword = function () {
+  if (!this.temporaryPasswordExpiresAt) return false;
+  return this.temporaryPasswordExpiresAt.getTime() > Date.now();
+};
 
 export default mongoose.model('User', userSchema);

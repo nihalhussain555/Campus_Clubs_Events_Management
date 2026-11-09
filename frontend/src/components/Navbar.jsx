@@ -17,7 +17,11 @@ import {
   GraduationCap
 } from 'lucide-react';
 
-import api, { authAPI, notificationAPI } from '../services/api';
+import api, {
+  authAPI,
+  notificationAPI,
+  clearPasswordSetupSession
+} from '../services/api';
 import { useTheme } from '../hooks/useTheme';
 
 
@@ -324,6 +328,8 @@ const Navbar = () => {
 
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+
+    clearPasswordSetupSession();
 
     delete api.defaults.headers.common.Authorization;
 

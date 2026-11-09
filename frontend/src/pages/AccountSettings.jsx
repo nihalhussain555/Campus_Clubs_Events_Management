@@ -15,6 +15,12 @@ import {
   isSupportedImage,
   MAX_UPLOAD_BYTES
 } from '../utils/imageUpload';
+import {
+  PASSWORD_REQUIREMENT_TEXT,
+  PASSWORD_RULES,
+  meetsPasswordPolicy,
+  passwordStrength
+} from '../utils/passwordPolicy';
 
 import {
   ArrowLeft,
@@ -31,7 +37,9 @@ import {
   Moon,
   Monitor,
   FileDown,
-  Database
+  Database,
+  Check,
+  X
 } from 'lucide-react';
 
 const SECTIONS = [
@@ -91,36 +99,6 @@ const scrub = (value) => {
 
     return clean;
   }, {});
-};
-
-// Scoring is deliberately crude: it is a typing aid next to the field, not a
-// policy check. The backend only enforces the minimum length.
-const passwordStrength = (value) => {
-  if (!value) {
-    return { percent: 0, color: 'var(--muted)', label: 'Enter a new password' };
-  }
-
-  let score = 0;
-
-  if (value.length >= 6) score += 1;
-  if (value.length >= 10) score += 1;
-  if (/[a-z]/.test(value) && /[A-Z]/.test(value)) score += 1;
-  if (/\d/.test(value)) score += 1;
-  if (/[^A-Za-z0-9]/.test(value)) score += 1;
-
-  const GRADES = [
-    { color: '#b42318', label: 'Too weak' },
-    { color: '#b42318', label: 'Weak' },
-    { color: '#d97706', label: 'Fair' },
-    { color: '#ca8a04', label: 'Good' },
-    { color: '#157f5b', label: 'Strong' },
-    { color: '#157f5b', label: 'Very strong' }
-  ];
-
-  return {
-    percent: (score / 5) * 100,
-    ...GRADES[score]
-  };
 };
 
 const AccountSettings = () => {
@@ -215,7 +193,11 @@ const AccountSettings = () => {
       return false;
     }
 
-    if (newPwd.length < 6) {
+    if (!meetsPasswordPolicy(newPwd)) {
+      return false;
+    }
+
+    if (newPwd === currentPwd) {
       return false;
     }
 
@@ -225,8 +207,10 @@ const AccountSettings = () => {
   const handleChangePassword = async () => {
     if (!validatePassword()) {
       setToast({
-        message:
-          'Please check your password fields. New password must match and contain at least 6 characters.',
+        message: !newPwd || !confirmPwd || newPwd !== confirmPwd
+          ? 'Please fill both new password fields and make them match.'
+          : PASSWORD_REQUIREMENT_TEXT +
+            ', and it must differ from your current password.',
         type: 'error'
       });
 
@@ -236,10 +220,16 @@ const AccountSettings = () => {
     setPwdLoading(true);
 
     try {
-      await authAPI.changePassword({
+      const { data } = await authAPI.changePassword({
         currentPassword: currentPwd,
         newPassword: newPwd
       });
+
+      // Changing the password revokes the token that made this request, so the
+      // replacement the backend returns has to be stored immediately.
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+      }
 
       setToast({
         message: 'Password changed successfully',
@@ -1157,6 +1147,33 @@ const AccountSettings = () => {
                     {strength.label}
                   </span>
                 </div>
+
+                {/* The button is gated on the same rules, so they are shown. */}
+                <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
+                  {PASSWORD_RULES.map((rule) => {
+                    const satisfied =
+                      Boolean(newPwd) && rule.test(newPwd);
+
+                    return (
+                      <li
+                        key={rule.id}
+                        className={
+                          satisfied
+                            ? 'flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700'
+                            : 'flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500'
+                        }
+                      >
+                        {satisfied ? (
+                          <Check size={13} />
+                        ) : (
+                          <X size={13} />
+                        )}
+
+                        {rule.label}
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
 
               {/* Confirm */}
@@ -1205,8 +1222,8 @@ const AccountSettings = () => {
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-slate-500">
-                Minimum 6 characters. Mixing upper and lower case letters,
-                numbers and symbols makes it much harder to guess.
+                {PASSWORD_REQUIREMENT_TEXT}. It also has to differ from the
+                password you are replacing.
               </p>
 
               <button

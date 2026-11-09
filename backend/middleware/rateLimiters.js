@@ -19,6 +19,19 @@ export const authLimiter = rateLimit({
   message: { message: 'Too many requests. Please try again later.' },
 });
 
+// The setup endpoint accepts a token that a legitimate holder may need to
+// retry after a validation mistake, so successes are free but guesses are not.
+export const passwordSetupLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: {
+    message: 'Too many password setup attempts. Please try again later.',
+  },
+});
+
 // Groq calls spend real quota.
 export const agentLimiter = rateLimit({
   windowMs: 60 * 1000,

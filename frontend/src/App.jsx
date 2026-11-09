@@ -11,6 +11,7 @@ const About = lazy(() => import('./pages/About'));
 const Contact = lazy(() => import('./pages/Contact'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
+const SetNewPassword = lazy(() => import('./pages/SetNewPassword'));
 const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate'));
 const Clubs = lazy(() => import('./pages/Clubs'));
 const Events = lazy(() => import('./pages/Events'));
@@ -45,6 +46,11 @@ function App() {
           <Route path="/contact" element={<Contact />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+
+          {/* Mandatory first-login password page. Public only in routing terms:
+              it needs the restricted setup token and redirects to login
+              without one. */}
+          <Route path="/set-new-password" element={<SetNewPassword />} />
           <Route
             path="/verify-certificate/:qrToken"
             element={<VerifyCertificate />}
