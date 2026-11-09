@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
-  Check,
   Clock,
   Eye,
   EyeOff,
   GraduationCap,
   KeyRound,
   Lock,
-  ShieldCheck,
-  X
+  ShieldCheck
 } from 'lucide-react';
 import {
   authAPI,
@@ -19,9 +17,9 @@ import {
 } from '../services/api';
 import {
   PASSWORD_REQUIREMENT_TEXT,
-  PASSWORD_RULES,
   passwordStrength
 } from '../utils/passwordPolicy';
+import PasswordRules from '../components/PasswordRules';
 import Toast from '../components/Toast';
 
 // Where each account type lands once it owns a real password.
@@ -287,31 +285,7 @@ const SetNewPassword = () => {
               </div>
 
               {/* REQUIREMENT CHECKLIST */}
-              <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-                {PASSWORD_RULES.map((rule) => {
-                  const satisfied =
-                    newPwd.length > 0 && rule.test(newPwd);
-
-                  return (
-                    <li
-                      key={rule.id}
-                      className={
-                        satisfied
-                          ? 'flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700'
-                          : 'flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-500'
-                      }
-                    >
-                      {satisfied ? (
-                        <Check size={14} />
-                      ) : (
-                        <X size={14} />
-                      )}
-
-                      {rule.label}
-                    </li>
-                  );
-                })}
-              </ul>
+              <PasswordRules value={newPwd} className="mt-4" />
             </div>
 
             {/* CONFIRM PASSWORD */}

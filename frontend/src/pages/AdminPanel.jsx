@@ -1772,7 +1772,7 @@ const AdminPanel = () => {
                   </p>
                 </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
 
                   <div className="relative w-full sm:w-72">
                     <Search
@@ -1816,40 +1816,42 @@ const AdminPanel = () => {
               -------------------------------------------------- */}
 
               {issuedCredential && (
-                <div className="modal-card border-[#bcddeb]">
+                <div className="app-card border-[#bcddeb]">
 
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-start justify-between gap-4">
 
-                    <div>
+                    <div className="min-w-0">
                       <p className="eyebrow mb-2">
                         Temporary password
                       </p>
 
-                      <h3 className="text-xl font-black text-black">
+                      <h3 className="truncate text-xl font-black text-black">
                         {issuedCredential.name}
                       </h3>
 
-                      <p className="mt-1 text-sm text-slate-600">
-                        {issuedCredential.email}
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <p className="text-sm text-slate-600">
+                          {issuedCredential.email}
+                        </p>
 
-                        <span className="chip ml-2 capitalize">
+                        <span className="chip capitalize">
                           {issuedCredential.role?.replace('_', ' ')}
                         </span>
-                      </p>
+                      </div>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => setIssuedCredential(null)}
                       aria-label="Dismiss temporary password"
-                      className="self-start rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-black"
+                      className="shrink-0 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-black"
                     >
                       <X size={18} />
                     </button>
 
                   </div>
 
-                  <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-stretch">
 
                     <input
                       readOnly
@@ -1862,7 +1864,7 @@ const AdminPanel = () => {
                     <button
                       type="button"
                       onClick={copyTemporaryPassword}
-                      className="btn-secondary flex items-center justify-center gap-2 whitespace-nowrap"
+                      className="btn-secondary flex items-center justify-center gap-2 whitespace-nowrap sm:px-6"
                     >
                       {copied ? <Check size={17} /> : <Copy size={17} />}
 
@@ -1871,21 +1873,21 @@ const AdminPanel = () => {
 
                   </div>
 
-                  <div className="mt-4 space-y-2 text-xs leading-5 text-slate-600">
-                    <p className="flex items-start gap-2 font-semibold text-[#145f82]">
+                  <div className="mt-4 space-y-2.5 text-xs leading-5 text-slate-600">
+                    <p className="flex items-start gap-2.5">
                       <KeyRound size={15} className="mt-0.5 shrink-0" />
 
-                      <span>
+                      <span className="flex-1 font-semibold text-[#145f82]">
                         This is the only time it is shown. Only an encrypted
                         copy is stored, and it stops working once the student
                         sets their own password.
                       </span>
                     </p>
 
-                    <p className="flex items-start gap-2">
+                    <p className="flex items-start gap-2.5">
                       <Clock size={15} className="mt-0.5 shrink-0" />
 
-                      <span>
+                      <span className="flex-1">
                         {issuedCredential.expiresAt
                           ? `Expires ${new Date(
                               issuedCredential.expiresAt
@@ -1894,10 +1896,10 @@ const AdminPanel = () => {
                       </span>
                     </p>
 
-                    <p className="flex items-start gap-2">
+                    <p className="flex items-start gap-2.5">
                       <AlertTriangle size={15} className="mt-0.5 shrink-0" />
 
-                      <span>
+                      <span className="flex-1">
                         Share it over a channel you trust with that person -
                         not in a public group. They must change it at first
                         login before any dashboard opens.

@@ -9,6 +9,7 @@ import {
 import Toast from '../components/Toast';
 import Navbar from "../components/Navbar";
 import LoadingScreen from '../components/LoadingScreen';
+import PasswordRules from '../components/PasswordRules';
 import { useTheme } from '../hooks/useTheme';
 import {
   downscaleImage,
@@ -17,7 +18,6 @@ import {
 } from '../utils/imageUpload';
 import {
   PASSWORD_REQUIREMENT_TEXT,
-  PASSWORD_RULES,
   meetsPasswordPolicy,
   passwordStrength
 } from '../utils/passwordPolicy';
@@ -37,9 +37,7 @@ import {
   Moon,
   Monitor,
   FileDown,
-  Database,
-  Check,
-  X
+  Database
 } from 'lucide-react';
 
 const SECTIONS = [
@@ -1149,31 +1147,7 @@ const AccountSettings = () => {
                 </div>
 
                 {/* The button is gated on the same rules, so they are shown. */}
-                <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
-                  {PASSWORD_RULES.map((rule) => {
-                    const satisfied =
-                      Boolean(newPwd) && rule.test(newPwd);
-
-                    return (
-                      <li
-                        key={rule.id}
-                        className={
-                          satisfied
-                            ? 'flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700'
-                            : 'flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500'
-                        }
-                      >
-                        {satisfied ? (
-                          <Check size={13} />
-                        ) : (
-                          <X size={13} />
-                        )}
-
-                        {rule.label}
-                      </li>
-                    );
-                  })}
-                </ul>
+                <PasswordRules value={newPwd} className="mt-3" />
               </div>
 
               {/* Confirm */}
