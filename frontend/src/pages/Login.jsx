@@ -271,7 +271,7 @@ const Login = () => {
             className="btn-primary w-full"
           >
             {loading
-              ? 'Processing...'
+              ? 'Verifying your credentials...'
               : 'Login'}
           </button>
 

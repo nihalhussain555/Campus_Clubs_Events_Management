@@ -340,7 +340,7 @@ const SetNewPassword = () => {
               className="btn-primary w-full"
             >
               {loading
-                ? 'Saving...'
+                ? 'Updating credentials...'
                 : 'Update password'}
             </button>
 

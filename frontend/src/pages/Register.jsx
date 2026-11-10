@@ -318,7 +318,7 @@ const Register = () => {
             className="btn-primary w-full mt-4"
           >
             {loading
-              ? 'Processing...'
+              ? 'Setting up your profile...'
               : 'Sign up'}
           </button>
 

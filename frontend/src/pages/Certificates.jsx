@@ -575,7 +575,7 @@ const Certificates = () => {
                   <div className="certificate-cell">
 
                     <p className="certificate-sign">
-                      Campus Clubs
+                      𝓝𝓲𝓱𝓪𝓵 𝓗𝓾𝓼𝓼𝓪𝓲𝓷
                     </p>
 
                     <div className="certificate-line" />
