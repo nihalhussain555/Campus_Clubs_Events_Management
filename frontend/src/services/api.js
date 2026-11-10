@@ -415,6 +415,29 @@ export const agentAPI = {
 };
 
 // =====================================================
+// HELP & SUPPORT API
+// =====================================================
+
+// The Help Center content is filtered by the server against the caller's role,
+// so the page renders whatever comes back without deciding visibility itself.
+export const helpAPI = {
+  getContent: () => api.get('/help/content'),
+
+  // history carries the earlier turns of this session; the server caps it.
+  assistant: (message, history = []) =>
+    api.post('/help/assistant', { message, history }),
+
+  createRequest: (payload) => api.post('/help/requests', payload),
+
+  myRequests: () => api.get('/help/requests/mine'),
+
+  adminRequests: (params) => api.get('/help/requests', { params }),
+
+  adminUpdateRequest: (id, payload) =>
+    api.put(`/help/requests/${id}`, payload)
+};
+
+// =====================================================
 // GAMIFICATION API
 // =====================================================
 

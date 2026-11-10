@@ -12,6 +12,11 @@ process.env.MONGO_URI = 'mongodb://127.0.0.1:1/memory-placeholder';
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-secret-not-used-in-production';
 
+// Cleared before any import so the suite can never spend Groq quota or depend
+// on the network: dotenv leaves an existing (even empty) value alone. The help
+// assistant's offline branch is what these tests cover.
+process.env.GROQ_API_KEY = '';
+
 const { MongoMemoryServer } = await import('mongodb-memory-server');
 const mongod = await MongoMemoryServer.create();
 process.env.MONGO_URI = mongod.getUri('campus_clubs_test');
@@ -29,7 +34,12 @@ const Notification = (await import('../models/Notification.js')).default;
 const XPTransaction = (await import('../models/XPTransaction.js')).default;
 const Gamification = (await import('../models/Gamification.js')).default;
 const StudentBadge = (await import('../models/StudentBadge.js')).default;
+const SupportRequest = (await import('../models/SupportRequest.js')).default;
 const { signCheckinToken } = await import('../utils/checkinToken.js');
+
+const helpDocs = await import('../data/helpDocs.js');
+const { canSee, filterHelpForRole } = await import('../utils/helpAccess.js');
+const { buildCatalog } = await import('../services/helpAssistant.js');
 
 const server = await new Promise((resolve) => {
   const s = app.listen(0, '127.0.0.1', () => resolve(s));
@@ -2645,6 +2655,626 @@ await test('changing a password returns a token that still works', async () => {
   });
   assert.equal(login.status, 200);
   assert.equal(login.data.passwordSetupRequired, undefined);
+});
+
+// ---------------------------------------------------------------- help center
+
+// Fresh plain-student fixtures: the shared `student` user is promoted to a club
+// leader by the leadership-transfer test much earlier in this suite, so role
+// expectations here must not ride on it.
+const helpStudent = await makeUser('Helen Help', 'helpstudent@test.dev');
+const legacyMember = await makeUser(
+  'Hank Member',
+  'helpmember@test.dev',
+  'club_member'
+);
+
+// Articles only an administrator may read. If the catalog ever stops carrying
+// admin-only guidance these assertions fire, because the role-filtering tests
+// below would otherwise pass on an empty set.
+const adminOnlyArticles = helpDocs.HELP_ARTICLES.filter(
+  (article) =>
+    canSee(article.roles, 'admin') && !canSee(article.roles, 'student')
+);
+
+const adminOnlyFaqs = helpDocs.HELP_FAQS.filter(
+  (faq) => canSee(faq.roles, 'admin') && !canSee(faq.roles, 'student')
+);
+
+// Every path the frontend actually routes. Documentation is not allowed to
+// point at a page that does not exist.
+const REAL_ROUTES = new Set([
+  '/', '/about', '/contact', '/login', '/register', '/set-new-password',
+  '/clubs', '/events', '/profile', '/account-settings', '/certificates',
+  '/calendar', '/leaderboard', '/notifications', '/help', '/admin', '/leader',
+]);
+
+const basePath = (path) => String(path).split('?')[0].split('#')[0];
+
+await test('help catalog documents the real product, not invented pages', async () => {
+  assert.ok(helpDocs.HELP_CATEGORIES.length >= 7, 'too few categories');
+  assert.ok(helpDocs.HELP_ARTICLES.length >= 15, 'too few articles');
+  assert.ok(helpDocs.HELP_FAQS.length >= 20, 'spec needs 20+ FAQs');
+  assert.ok(adminOnlyArticles.length >= 1, 'no admin-only article to filter');
+  assert.ok(
+    helpDocs.HELP_ARTICLES.some(
+      (a) => canSee(a.roles, 'club_leader') && !canSee(a.roles, 'student')
+    ),
+    'no leader-only article to filter'
+  );
+
+  const categoryIds = new Set(helpDocs.HELP_CATEGORIES.map((c) => c.id));
+  const seen = new Set();
+
+  for (const article of helpDocs.HELP_ARTICLES) {
+    assert.ok(article.id && article.title && article.summary, 'incomplete article');
+    assert.ok(!seen.has(article.id), `duplicate article id ${article.id}`);
+    seen.add(article.id);
+    assert.ok(categoryIds.has(article.categoryId), `unknown category ${article.categoryId}`);
+    assert.ok(Array.isArray(article.steps) && article.steps.length >= 2, `${article.id} has no steps`);
+
+    for (const link of article.relatedRoutes || []) {
+      assert.ok(
+        REAL_ROUTES.has(basePath(link.path)),
+        `${article.id} links to ${link.path}, which is not a page`
+      );
+    }
+  }
+
+  for (const faq of helpDocs.HELP_FAQS) {
+    assert.ok(faq.question && faq.answer, 'incomplete FAQ');
+    assert.ok(categoryIds.has(faq.categoryId), `FAQ in unknown category ${faq.categoryId}`);
+  }
+
+  // The catalog must cover each feature area the spec lists.
+  const prose = helpDocs.HELP_ARTICLES.map((a) => `${a.title} ${a.summary} ${(a.steps || []).join(' ')}`).join(' ').toLowerCase();
+  for (const topic of ['password', 'certificate', 'leaderboard', 'notification', 'register', 'check', 'qr']) {
+    assert.ok(prose.includes(topic), `no documentation covers ${topic}`);
+  }
+});
+
+await test('help content requires a signed-in user', async () => {
+  assert.equal((await call('GET', '/help/content')).status, 401);
+});
+
+await test('student help payload is scoped and carries no admin guidance', async () => {
+  const { status, data } = await call('GET', '/help/content', {
+    token: helpStudent.token,
+  });
+
+  assert.equal(status, 200);
+  assert.equal(data.success, true);
+  assert.equal(data.role, 'student');
+
+  const ids = new Set(data.articles.map((a) => a.id));
+  const questions = new Set(data.faqs.map((f) => f.question));
+
+  for (const article of adminOnlyArticles) {
+    assert.ok(!ids.has(article.id), `${article.id} leaked to a student`);
+  }
+
+  for (const faq of adminOnlyFaqs) {
+    assert.ok(!questions.has(faq.question), `${faq.question} leaked to a student`);
+  }
+
+  // Nothing unscoped sneaks through the other way either.
+  for (const article of data.articles) {
+    assert.ok(canSee(article.roles, 'student'), `${article.id} is not student-facing`);
+  }
+
+  // A category card with nothing behind it would open an empty panel.
+  for (const category of data.categories) {
+    assert.ok(
+      data.articles.some((a) => a.categoryId === category.id) ||
+        data.faqs.some((f) => f.categoryId === category.id),
+      `empty category ${category.id}`
+    );
+  }
+});
+
+await test('club leader sees leader guidance but still no admin guidance', async () => {
+  const { data } = await call('GET', '/help/content', { token: leader.token });
+  assert.equal(data.role, 'club_leader');
+
+  const ids = new Set(data.articles.map((a) => a.id));
+  const adminOnly = helpDocs.HELP_ARTICLES.filter(
+    (a) => canSee(a.roles, 'admin') && !canSee(a.roles, 'club_leader')
+  );
+
+  for (const article of adminOnly) {
+    assert.ok(!ids.has(article.id), `${article.id} leaked to a leader`);
+  }
+
+  assert.ok(
+    data.articles.some(
+      (a) => canSee(a.roles, 'club_leader') && !canSee(a.roles, 'student')
+    ),
+    'leader got no leader-only guidance'
+  );
+});
+
+await test('admin help payload is the complete catalog', async () => {
+  const { data } = await call('GET', '/help/content', { token: admin.token });
+  assert.equal(data.role, 'admin');
+  assert.equal(data.articles.length, helpDocs.HELP_ARTICLES.length);
+  assert.equal(data.faqs.length, helpDocs.HELP_FAQS.length);
+  assert.equal(data.categories.length, helpDocs.HELP_CATEGORIES.length);
+});
+
+await test('legacy club_member rows get the student view', async () => {
+  const { status, data } = await call('GET', '/help/content', {
+    token: legacyMember.token,
+  });
+
+  assert.equal(status, 200);
+  assert.equal(data.role, 'student');
+
+  const studentView = filterHelpForRole(
+    {
+      categories: helpDocs.HELP_CATEGORIES,
+      articles: helpDocs.HELP_ARTICLES,
+      faqs: helpDocs.HELP_FAQS,
+    },
+    'student'
+  );
+
+  assert.deepEqual(
+    data.articles.map((a) => a.id),
+    studentView.articles.map((a) => a.id)
+  );
+});
+
+await test('assistant reports itself unavailable when no key is configured', async () => {
+  const { status, data } = await call('GET', '/help/content', {
+    token: helpStudent.token,
+  });
+
+  assert.equal(data.success, true);
+  assert.equal(data.assistantEnabled, false);
+});
+
+// ---------------------------------------------------------------- clubassist
+
+await test('assistant requires a token', async () => {
+  assert.equal(
+    (await call('POST', '/help/assistant', { body: { message: 'how do i join a club?' } })).status,
+    401
+  );
+});
+
+await test('assistant rejects an empty or oversized question', async () => {
+  const empty = await call('POST', '/help/assistant', {
+    token: helpStudent.token,
+    body: { message: '   ' },
+  });
+  assert.equal(empty.status, 400);
+  assert.equal(empty.data.success, false);
+
+  const long = await call('POST', '/help/assistant', {
+    token: helpStudent.token,
+    body: { message: 'x'.repeat(501) },
+  });
+  assert.equal(long.status, 400);
+});
+
+await test('assistant rejects a malformed history instead of trusting it', async () => {
+  const { status } = await call('POST', '/help/assistant', {
+    token: helpStudent.token,
+    body: {
+      message: 'how do certificates work?',
+      history: 'not-an-array',
+    },
+  });
+
+  // Unconfigured provider: the route still answers with 503 and real article
+  // suggestions rather than throwing on the junk history.
+  assert.equal(status, 503);
+});
+
+await test('assistant degrades to real article links when offline', async () => {
+  const { status, data } = await call('POST', '/help/assistant', {
+    token: helpStudent.token,
+    body: { message: 'How do I download my certificate?' },
+  });
+
+  assert.equal(status, 503);
+  assert.equal(data.success, false);
+  assert.ok(Array.isArray(data.suggestions));
+  assert.ok(data.suggestions.length >= 1, 'no suggestions offered');
+
+  const visible = new Set(
+    filterHelpForRole({ articles: helpDocs.HELP_ARTICLES }, 'student').articles.map((a) => a.id)
+  );
+
+  for (const suggestion of data.suggestions) {
+    assert.ok(visible.has(suggestion.articleId), `suggested unknown article ${suggestion.articleId}`);
+    assert.ok(suggestion.title, 'suggestion without a title');
+  }
+});
+
+await test('assistant suggestions never leak admin-only articles', async () => {
+  const { data } = await call('POST', '/help/assistant', {
+    token: helpStudent.token,
+    body: { message: 'How do I delete a user account and handle support requests?' },
+  });
+
+  const adminIds = new Set(adminOnlyArticles.map((a) => a.id));
+
+  for (const suggestion of data.suggestions || []) {
+    assert.ok(!adminIds.has(suggestion.articleId), `${suggestion.articleId} leaked`);
+  }
+
+  const asAdmin = await call('POST', '/help/assistant', {
+    token: admin.token,
+    body: { message: 'How do I delete a user account and handle support requests?' },
+  });
+
+  assert.equal(asAdmin.status, 503);
+});
+
+// The provider behind the assistant caps a request at a few thousand tokens,
+// which is smaller than the whole admin catalog, so the prompt is assembled per
+// question. These pin that assembly: it must fit the budget, must keep the FAQs
+// and the topic actually asked about (an earlier build cut both silently and the
+// assistant then denied features the documentation covers), and the leftover
+// title index must stay inside the caller's role.
+await test('assistant prompt fits the provider budget and keeps its FAQs', async () => {
+  const questions = [
+    'How do I register for an event?',
+    'Does my check in code expire?',
+    'How do I send an announcement to every user?',
+    'How do I work the support queue?',
+    'How are points and badges adjusted?',
+  ];
+
+  for (const role of ['student', 'club_leader', 'admin']) {
+    for (const question of questions) {
+      const catalog = buildCatalog(role, question);
+
+      assert.ok(
+        catalog.length <= 24000,
+        `${role} prompt is ${catalog.length} characters`
+      );
+      assert.match(catalog, /^TOPIC: /m, `${role} prompt has no articles`);
+      assert.match(catalog, /^Q: /m, `${role} prompt has no FAQs`);
+    }
+  }
+});
+
+await test('assistant prompt keeps the topic the question is about', async () => {
+  const cases = [
+    ['admin', 'How do I send an announcement to every user?', 'Sending announcements'],
+    ['admin', 'How do I work the support queue?', 'Working the support queue'],
+    ['club_leader', 'How do I run the check in desk?', 'Running the check-in desk'],
+    ['student', 'How do I get my certificate?', 'Downloading and proving a certificate'],
+  ];
+
+  for (const [role, question, title] of cases) {
+    assert.ok(
+      buildCatalog(role, question).includes(`TOPIC: ${title} `),
+      `${role} asking "${question}" lost the "${title}" steps`
+    );
+  }
+});
+
+await test('assistant prompt keeps admin topics away from students', async () => {
+  const adminTitles = adminOnlyArticles.map((article) => article.title);
+  const catalog = buildCatalog(
+    'student',
+    'How do I send an announcement to every user and adjust someone else points and handle support requests?'
+  );
+
+  for (const title of adminTitles) {
+    assert.ok(!catalog.includes(`TOPIC: ${title} `), `${title} reached a student`);
+    assert.ok(!catalog.includes(title), `${title} named in a student prompt`);
+  }
+
+  for (const faq of adminOnlyFaqs) {
+    assert.ok(!catalog.includes(faq.question), `${faq.question} reached a student`);
+  }
+});
+
+// ---------------------------------------------------------------- tickets
+
+const ticket = (overrides = {}) => ({
+  subject: 'Cannot download certificate',
+  category: 'certificates',
+  description: 'The download button spins and nothing arrives after check-in.',
+  ...overrides,
+});
+
+await test('support request is stored and reaches the admins', async () => {
+  const before = await Notification.countDocuments({
+    user: admin.id,
+    title: 'New support request',
+  });
+
+  const { status, data } = await call('POST', '/help/requests', {
+    token: helpStudent.token,
+    body: ticket(),
+  });
+
+  assert.equal(status, 201);
+  assert.equal(data.success, true);
+  assert.equal(data.request.status, 'open');
+  assert.equal(data.request.category, 'certificates');
+  assert.ok(data.request.id);
+
+  const stored = await SupportRequest.findById(data.request.id).lean();
+  assert.equal(String(stored.user), helpStudent.id);
+  assert.equal(stored.status, 'open');
+
+  const after = await Notification.countDocuments({
+    user: admin.id,
+    title: 'New support request',
+  });
+  assert.equal(after, before + 1, 'the queue was not notified');
+
+  // A student must never receive another student's ticket alert.
+  assert.equal(
+    await Notification.countDocuments({
+      user: other.id,
+      title: 'New support request',
+    }),
+    0
+  );
+});
+
+await test('support request input is validated', async () => {
+  const cases = [
+    [{ subject: 'ab' }, 'short subject'],
+    [{ subject: 'x'.repeat(121) }, 'long subject'],
+    [{ category: 'not-a-category' }, 'unknown category'],
+    [{ description: 'nope' }, 'short description'],
+    [{ description: 'y'.repeat(2001) }, 'long description'],
+  ];
+
+  for (const [override, label] of cases) {
+    const { status, data } = await call('POST', '/help/requests', {
+      token: helpStudent.token,
+      body: ticket(override),
+    });
+
+    assert.equal(status, 400, `${label} was accepted`);
+    assert.equal(data.success, false);
+  }
+
+  assert.equal(
+    await SupportRequest.countDocuments({ user: helpStudent.id }),
+    1,
+    'a rejected request was still stored'
+  );
+});
+
+await test('a request is only visible to its owner and to admins', async () => {
+  const mine = await call('GET', '/help/requests/mine', {
+    token: helpStudent.token,
+  });
+  assert.equal(mine.status, 200);
+  assert.equal(mine.data.requests.length, 1);
+  assert.equal(mine.data.requests[0].subject, 'Cannot download certificate');
+
+  const theirs = await call('GET', '/help/requests/mine', {
+    token: other.token,
+  });
+  assert.equal(theirs.status, 200);
+  assert.equal(theirs.data.requests.length, 0);
+
+  assert.equal((await call('GET', '/help/requests/mine')).status, 401);
+});
+
+await test('the ticket queue is administrators only', async () => {
+  assert.equal((await call('GET', '/help/requests')).status, 401);
+
+  for (const [token, label] of [
+    [helpStudent.token, 'student'],
+    [leader.token, 'club_leader'],
+  ]) {
+    assert.equal((await call('GET', '/help/requests', { token })).status, 403, label);
+
+    const { status } = await call('PUT', '/help/requests/deadbeefdeadbeefdeadbeef', {
+      token,
+      body: { status: 'resolved', adminResponse: 'done' },
+    });
+    assert.equal(status, 403, `${label} mutated a ticket`);
+  }
+});
+
+await test('admin queue lists requests with the requester and counts', async () => {
+  await call('POST', '/help/requests', {
+    token: other.token,
+    body: ticket({
+      subject: 'Leaderboard points look wrong',
+      category: 'leaderboard',
+      description: 'I attended two events this month but my total did not move.',
+    }),
+  });
+
+  const { status, data } = await call('GET', '/help/requests', {
+    token: admin.token,
+  });
+
+  assert.equal(status, 200);
+  assert.equal(data.requests.length, 2);
+  assert.equal(data.total, 2);
+  assert.equal(data.counts.open, 2);
+  assert.equal(data.counts.resolved, 0);
+
+  const withUser = data.requests.find((r) => r.subject === 'Leaderboard points look wrong');
+  assert.equal(withUser.user.email, other.email);
+  assert.equal(withUser.user.role, 'student');
+
+  // Internal-only fields never leave the server.
+  assert.equal(withUser.handledBy, undefined);
+  assert.equal(withUser.__v, undefined);
+});
+
+await test('admin queue filters and searches safely', async () => {
+  const byCategory = await call('GET', '/help/requests?category=leaderboard', {
+    token: admin.token,
+  });
+  assert.equal(byCategory.data.requests.length, 1);
+  assert.equal(byCategory.data.requests[0].category, 'leaderboard');
+
+  const bySearch = await call('GET', '/help/requests?search=certificate', {
+    token: admin.token,
+  });
+  assert.equal(bySearch.data.requests.length, 1);
+
+  const byEmail = await call('GET', `/help/requests?search=${encodeURIComponent(other.email)}`, {
+    token: admin.token,
+  });
+  assert.equal(byEmail.data.requests.length, 1);
+
+  // Regex metacharacters must be data, not a pattern.
+  const regex = await call('GET', '/help/requests?search=.*', { token: admin.token });
+  assert.equal(regex.status, 200);
+  assert.equal(regex.data.requests.length, 0, 'unescaped search matched everything');
+
+  const badStatus = await call('GET', '/help/requests?status=bogus', {
+    token: admin.token,
+  });
+  assert.equal(badStatus.status, 400);
+
+  const paged = await call('GET', '/help/requests?page=2&limit=1', {
+    token: admin.token,
+  });
+  assert.equal(paged.data.requests.length, 1);
+  assert.equal(paged.data.pages, 2);
+});
+
+await test('updating a ticket validates before it touches the database', async () => {
+  const list = await call('GET', '/help/requests', { token: admin.token });
+  const target = list.data.requests.find((r) => r.category === 'certificates');
+
+  const badId = await call('PUT', '/help/requests/not-an-id', {
+    token: admin.token,
+    body: { status: 'open' },
+  });
+  assert.equal(badId.status, 400);
+
+  const unknown = await call('PUT', '/help/requests/012345678901234567890123', {
+    token: admin.token,
+    body: { status: 'open' },
+  });
+  assert.equal(unknown.status, 404);
+
+  const badStatus = await call('PUT', `/help/requests/${target.id}`, {
+    token: admin.token,
+    body: { status: 'fixed' },
+  });
+  assert.equal(badStatus.status, 400);
+
+  const longReply = await call('PUT', `/help/requests/${target.id}`, {
+    token: admin.token,
+    body: { status: 'open', adminResponse: 'r'.repeat(2001) },
+  });
+  assert.equal(longReply.status, 400);
+
+  // Closing needs a reply: a ticket cannot be shut with the student left
+  // wondering what happened.
+  const noReply = await call('PUT', `/help/requests/${target.id}`, {
+    token: admin.token,
+    body: { status: 'resolved' },
+  });
+  assert.equal(noReply.status, 400);
+
+  const untouched = await SupportRequest.findById(target.id).lean();
+  assert.equal(untouched.status, 'open');
+});
+
+await test('an agent can progress and resolve a ticket, notifying the owner', async () => {
+  const list = await call('GET', '/help/requests', { token: admin.token });
+  const target = list.data.requests.find((r) => r.category === 'certificates');
+
+  const before = await Notification.countDocuments({
+    user: helpStudent.id,
+    title: 'Update on your support request',
+  });
+
+  const inProgress = await call('PUT', `/help/requests/${target.id}`, {
+    token: admin.token,
+    body: { status: 'in_progress' },
+  });
+  assert.equal(inProgress.status, 200);
+  assert.equal(inProgress.data.request.status, 'in_progress');
+
+  // A status flicker with nothing written must not notify anyone twice.
+  assert.equal(
+    await Notification.countDocuments({
+      user: helpStudent.id,
+      title: 'Update on your support request',
+    }),
+    before
+  );
+
+  const resolved = await call('PUT', `/help/requests/${target.id}`, {
+    token: admin.token,
+    body: { status: 'resolved', adminResponse: 'Re-issued: check the Certificates page now.' },
+  });
+  assert.equal(resolved.status, 200);
+  assert.equal(resolved.data.request.status, 'resolved');
+  assert.ok(resolved.data.request.respondedAt);
+
+  assert.equal(
+    await Notification.countDocuments({
+      user: helpStudent.id,
+      title: 'Update on your support request',
+    }),
+    before + 1
+  );
+
+  assert.equal(
+    await Notification.countDocuments({
+      user: other.id,
+      title: 'Update on your support request',
+    }),
+    0,
+    'the reply was sent to the wrong student'
+  );
+
+  const mine = await call('GET', '/help/requests/mine', { token: helpStudent.token });
+  assert.equal(mine.data.requests[0].status, 'resolved');
+  assert.match(mine.data.requests[0].adminResponse, /Certificates page/);
+});
+
+await test('an admin filing a ticket does not notify themselves', async () => {
+  const { status } = await call('POST', '/help/requests', {
+    token: admin.token,
+    body: ticket({
+      subject: 'Typos in the help catalog',
+      category: 'feedback',
+      description: 'A few articles read awkwardly around the check-in section.',
+    }),
+  });
+  assert.equal(status, 201);
+
+  assert.equal(
+    await Notification.countDocuments({
+      user: admin.id,
+      title: 'New support request',
+      message: /Typos in the help catalog/,
+    }),
+    0
+  );
+});
+
+await test('ticket fields survive injection-shaped input', async () => {
+  const { status, data } = await call('POST', '/help/requests', {
+    token: other.token,
+    body: ticket({
+      subject: '{{$ne}}',
+      category: 'technical',
+      description: '{"$where":"sleep(1)"} <script>alert(1)</script> please help',
+    }),
+  });
+
+  assert.equal(status, 201);
+
+  const stored = await SupportRequest.findById(data.request.id).lean();
+  assert.equal(stored.subject, '{{$ne}}');
+  assert.ok(stored.description.includes('<script>'), 'stored as opaque text');
+  assert.equal(await SupportRequest.countDocuments({ _id: { $ne: null } }), 4);
 });
 
 // ---------------------------------------------------------------- summary

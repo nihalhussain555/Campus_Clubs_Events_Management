@@ -13,7 +13,9 @@ import {
   Clock,
   Copy,
   Download,
+  Inbox,
   KeyRound,
+  LifeBuoy,
   MapPin,
   Medal,
   Plus,
@@ -35,6 +37,7 @@ import {
   clubAPI,
   eventAPI,
   gamificationAPI,
+  helpAPI,
   notificationAPI,
 } from '../services/api';
 import LoadingScreen from '../components/LoadingScreen';
@@ -87,6 +90,80 @@ const credentialStatus = (user) => {
     Icon: Clock,
   };
 };
+
+// Support queue vocabularies. These mirror the server model exactly, so the
+// filter pills, the chips and the status selector all read from one place.
+const SUPPORT_STATUSES = ['open', 'in_progress', 'resolved', 'closed'];
+
+const SUPPORT_CATEGORIES = [
+  'account',
+  'clubs',
+  'events',
+  'certificates',
+  'leaderboard',
+  'technical',
+  'feedback',
+];
+
+// Colour families are restricted to the utilities re-declared under .dark in
+// styles.css, so the chips stay legible in both themes.
+const SUPPORT_STATUS_META = {
+  open: {
+    label: 'Open',
+    className: 'bg-amber-50 text-amber-700 border-amber-200',
+    Icon: Inbox,
+  },
+  in_progress: {
+    label: 'In progress',
+    className: 'bg-blue-50 text-blue-700 border-blue-200',
+    Icon: Clock,
+  },
+  resolved: {
+    label: 'Resolved',
+    className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    Icon: CheckCircle2,
+  },
+  closed: {
+    label: 'Closed',
+    className: 'bg-slate-100 text-slate-700 border-slate-200',
+    Icon: X,
+  },
+};
+
+const supportStatusMeta = (status) =>
+  SUPPORT_STATUS_META[status] || {
+    label: status || 'Unknown',
+    className: 'bg-slate-100 text-slate-700 border-slate-200',
+    Icon: Inbox,
+  };
+
+const SUPPORT_CATEGORY_LABELS = {
+  account: 'Account',
+  clubs: 'Clubs',
+  events: 'Events',
+  certificates: 'Certificates',
+  leaderboard: 'Leaderboard',
+  technical: 'Technical',
+  feedback: 'Feedback',
+};
+
+const supportCategoryLabel = (category) =>
+  SUPPORT_CATEGORY_LABELS[category] || category || 'Uncategorised';
+
+// Captions under the counts strip, so the numbers read as a triage board.
+const SUPPORT_COUNT_HINTS = {
+  open: 'Waiting for a first reply',
+  in_progress: 'Being worked on now',
+  resolved: 'Answered, not yet closed',
+  closed: 'Finished requests',
+};
+
+// A request moved into one of these states notifies the student with the admin
+// response, so an empty reply would send them nothing useful.
+const SUPPORT_RESOLVING_STATUSES = ['resolved', 'closed'];
+
+const SUPPORT_RESPONSE_MAX = 2000;
+const SUPPORT_PAGE_LIMIT = 20;
 
 const XP_TYPE_LABELS = {
   event_attendance: 'Event attendance',
@@ -183,6 +260,16 @@ const AdminPanel = () => {
     }
   });
 
+  // Guards the lazily loaded Support queue: an admin endpoint must never be
+  // called for a session that is not an administrator.
+  const [isAdminSession] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}')?.role === 'admin';
+    } catch {
+      return false;
+    }
+  });
+
   const [newClub, setNewClub] = useState({
     clubName: '',
     description: '',
@@ -249,6 +336,29 @@ const AdminPanel = () => {
   const [reportBusy, setReportBusy] = useState(false);
   const [recomputeBusy, setRecomputeBusy] = useState(false);
   const [lastRecompute, setLastRecompute] = useState(null);
+
+  // --------------------------------------------------
+  // SUPPORT QUEUE (Help & Support Center requests)
+  // --------------------------------------------------
+
+  // Loaded lazily when the Support tab opens; deliberately kept out of the
+  // fetchAdminData polling path so the other tabs stay as fast as before.
+  const [support, setSupport] = useState(null);
+  const [supportLoading, setSupportLoading] = useState(false);
+  const [supportError, setSupportError] = useState(null);
+
+  const [supportStatus, setSupportStatus] = useState('');
+  const [supportCategory, setSupportCategory] = useState('');
+  const [supportSearch, setSupportSearch] = useState('');
+  const [debouncedSupportSearch, setDebouncedSupportSearch] = useState('');
+  const [supportPage, setSupportPage] = useState(1);
+
+  // The request currently open in the detail panel, plus its unsaved draft.
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [draftStatus, setDraftStatus] = useState('');
+  const [draftResponse, setDraftResponse] = useState('');
+  const [supportSaving, setSupportSaving] = useState(false);
+  const [supportFormError, setSupportFormError] = useState(null);
 
   // --------------------------------------------------
   // FETCH DATA
@@ -529,6 +639,172 @@ const AdminPanel = () => {
       });
     } finally {
       setLedgerBusy(false);
+    }
+  };
+
+  // --------------------------------------------------
+  // SUPPORT QUEUE DATA
+  // --------------------------------------------------
+
+  // Typing debounces into debouncedSupportSearch before it reaches the server,
+  // so a search keystroke does not fire a request of its own.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSupportSearch(supportSearch.trim());
+    }, 400);
+
+    return () => window.clearTimeout(timer);
+  }, [supportSearch]);
+
+  // isCancelled is supplied by the tab effect so a response that arrives after
+  // the tab changed or the page unmounted is dropped instead of landing late.
+  const loadSupport = async (isCancelled) => {
+    try {
+      setSupportLoading(true);
+      setSupportError(null);
+
+      const response = await helpAPI.adminRequests({
+        status: supportStatus || undefined,
+        category: supportCategory || undefined,
+        search: debouncedSupportSearch || undefined,
+        page: supportPage,
+        limit: SUPPORT_PAGE_LIMIT,
+      });
+
+      if (isCancelled?.()) return;
+
+      const data = response.data || {};
+
+      setSupport({
+        requests: data.requests || [],
+        total: data.total || 0,
+        page: data.page || supportPage,
+        pages: data.pages || 1,
+        counts: data.counts || {},
+      });
+    } catch (error) {
+      if (isCancelled?.()) return;
+
+      setSupportError(
+        error.response?.data?.message ||
+        'Unable to load the support queue'
+      );
+    } finally {
+      if (!isCancelled?.()) {
+        setSupportLoading(false);
+      }
+    }
+  };
+
+  // Lazy by design: fetched when the Support tab opens and again whenever a
+  // filter, the search or the page changes. Never called for a non-admin
+  // session, and kept off the fetchAdminData path so other tabs stay untouched.
+  useEffect(() => {
+    if (activeTab !== 'support' || !isAdminSession) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    loadSupport(() => cancelled);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeTab,
+    isAdminSession,
+    supportStatus,
+    supportCategory,
+    debouncedSupportSearch,
+    supportPage,
+  ]);
+
+  const openSupportRequest = (request) => {
+    setSelectedRequest(request);
+    setDraftStatus(request.status || 'open');
+    setDraftResponse(request.adminResponse || '');
+    setSupportFormError(null);
+  };
+
+  const closeSupportRequest = () => {
+    if (supportSaving) return;
+
+    setSelectedRequest(null);
+    setSupportFormError(null);
+  };
+
+  // Escape closes the detail panel, matching ConfirmDialog.
+  useEffect(() => {
+    if (!selectedRequest) {
+      return undefined;
+    }
+
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape' && !supportSaving) {
+        setSelectedRequest(null);
+        setSupportFormError(null);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [selectedRequest, supportSaving]);
+
+  const handleSupportSave = async () => {
+    if (!selectedRequest) return;
+
+    if (!draftStatus) {
+      setSupportFormError('Choose a status before saving this request.');
+      return;
+    }
+
+    // Resolving or closing emails the student the admin response, so a blank
+    // one would notify them with nothing they can act on.
+    if (
+      SUPPORT_RESOLVING_STATUSES.includes(draftStatus) &&
+      !draftResponse.trim()
+    ) {
+      setSupportFormError(
+        `Write a response before marking this ${draftStatus}. The student is ` +
+        'notified with this message, so a resolution without one leaves them ' +
+        'without an answer.'
+      );
+      return;
+    }
+
+    setSupportFormError(null);
+
+    try {
+      setSupportSaving(true);
+
+      // The API hands out `id`, not mongoose's `_id`.
+      const response = await helpAPI.adminUpdateRequest(selectedRequest.id, {
+        status: draftStatus,
+        adminResponse: draftResponse.trim(),
+      });
+
+      setToast({
+        message:
+          response.data?.message || 'Support request updated',
+        type: 'success',
+      });
+
+      setSelectedRequest(null);
+
+      await loadSupport();
+    } catch (error) {
+      setToast({
+        message:
+          error.response?.data?.message ||
+          'Unable to update that support request',
+        type: 'error',
+      });
+    } finally {
+      setSupportSaving(false);
     }
   };
 
@@ -1323,6 +1599,11 @@ const AdminPanel = () => {
       id: 'notifications',
       label: 'Notifications',
       icon: Bell,
+    },
+    {
+      id: 'support',
+      label: 'Support',
+      icon: LifeBuoy,
     },
     {
       id: 'gamification',
@@ -4540,6 +4821,421 @@ const AdminPanel = () => {
             </section>
           )}
 
+          {/* ==================================================
+              SUPPORT
+          ================================================== */}
+
+          {activeTab === 'support' && (
+            <section className="space-y-6">
+
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-black">
+                    Support Requests
+                  </h2>
+
+                  <p className="mt-1 max-w-2xl text-sm text-slate-500">
+                    Everything students submit through the Help &amp; Support
+                    Center form, gathered into one queue you can triage,
+                    reassign and answer.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => loadSupport()}
+                  disabled={supportLoading}
+                  className="btn-secondary self-start lg:self-auto"
+                >
+                  <RefreshCw
+                    size={17}
+                    className={supportLoading ? 'animate-spin' : ''}
+                  />
+                  Refresh
+                </button>
+              </div>
+
+              {/* --------------------------------------------------
+                  COUNTS
+              -------------------------------------------------- */}
+
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+                {SUPPORT_STATUSES.map((statusKey) => {
+                  const meta = supportStatusMeta(statusKey);
+                  const Icon = meta.Icon;
+
+                  return (
+                    <article key={statusKey} className="metric-card">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-wider text-slate-400">
+                            {meta.label}
+                          </p>
+
+                          <p className="mt-3 text-4xl font-black text-black">
+                            {(
+                              support?.counts?.[statusKey] || 0
+                            ).toLocaleString()}
+                          </p>
+
+                          <p className="mt-2 text-xs font-semibold text-slate-500">
+                            {SUPPORT_COUNT_HINTS[statusKey]}
+                          </p>
+                        </div>
+
+                        <span className="icon-tile">
+                          <Icon size={21} />
+                        </span>
+                      </div>
+                    </article>
+                  );
+                })}
+
+              </div>
+
+              {/* --------------------------------------------------
+                  FILTERS
+              -------------------------------------------------- */}
+
+              <div className="app-card space-y-4">
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSupportStatus('');
+                      setSupportPage(1);
+                    }}
+                    className={`filter-pill ${
+                      supportStatus === '' ? 'filter-pill-active' : ''
+                    }`}
+                  >
+                    All
+
+                    <span className="ml-2 font-bold">
+                      {support?.counts
+                        ? SUPPORT_STATUSES.reduce(
+                            (sum, key) =>
+                              sum + (support.counts?.[key] || 0),
+                            0
+                          )
+                        : support?.total || 0}
+                    </span>
+                  </button>
+
+                  {SUPPORT_STATUSES.map((statusKey) => {
+                    const meta = supportStatusMeta(statusKey);
+
+                    return (
+                      <button
+                        key={statusKey}
+                        type="button"
+                        onClick={() => {
+                          setSupportStatus(statusKey);
+                          setSupportPage(1);
+                        }}
+                        className={`filter-pill ${
+                          supportStatus === statusKey
+                            ? 'filter-pill-active'
+                            : ''
+                        }`}
+                      >
+                        {meta.label}
+
+                        <span className="ml-2 font-bold">
+                          {support?.counts?.[statusKey] || 0}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+
+                  <div className="sm:w-56">
+                    <select
+                      value={supportCategory}
+                      onChange={(event) => {
+                        setSupportCategory(event.target.value);
+                        setSupportPage(1);
+                      }}
+                      aria-label="Filter requests by category"
+                      className="field"
+                    >
+                      <option value="">All categories</option>
+
+                      {SUPPORT_CATEGORIES.map((option) => (
+                        <option
+                          key={option}
+                          value={option}
+                        >
+                          {supportCategoryLabel(option)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="relative flex-1">
+                    <Search
+                      size={17}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+
+                    <input
+                      type="text"
+                      value={supportSearch}
+                      onChange={(event) => {
+                        setSupportSearch(event.target.value);
+                        setSupportPage(1);
+                      }}
+                      placeholder="Search subject, description or requester email..."
+                      className="field w-full pl-10"
+                    />
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* --------------------------------------------------
+                  ERROR
+              -------------------------------------------------- */}
+
+              {supportError && (
+                <div className="app-card border-red-200 bg-red-50 py-12 text-center">
+                  <AlertTriangle
+                    size={30}
+                    className="mx-auto text-red-700"
+                  />
+
+                  <p className="mt-4 font-bold text-red-700">
+                    {supportError}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => loadSupport()}
+                    disabled={supportLoading}
+                    className="btn-secondary mt-5"
+                  >
+                    <RefreshCw
+                      size={16}
+                      className={supportLoading ? 'animate-spin' : ''}
+                    />
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {/* --------------------------------------------------
+                  LOADING
+              -------------------------------------------------- */}
+
+              {!supportError && !support && supportLoading && (
+                <div className="app-card py-16 text-center">
+                  <RefreshCw
+                    size={30}
+                    className="mx-auto animate-spin text-slate-300"
+                  />
+
+                  <p className="mt-4 font-bold text-slate-500">
+                    Loading support requests...
+                  </p>
+                </div>
+              )}
+
+              {/* --------------------------------------------------
+                  QUEUE
+              -------------------------------------------------- */}
+
+              {!supportError && support && (
+                <>
+
+                  <div className="table-shell overflow-x-auto">
+
+                    <table className="w-full min-w-[1000px]">
+
+                      <thead className="table-head">
+                        <tr>
+                          <th className="table-cell text-left">
+                            Requester
+                          </th>
+
+                          <th className="table-cell text-left">
+                            Category
+                          </th>
+
+                          <th className="table-cell text-left">
+                            Subject
+                          </th>
+
+                          <th className="table-cell text-left">
+                            Status
+                          </th>
+
+                          <th className="table-cell text-left">
+                            Created
+                          </th>
+
+                          <th className="table-cell text-right">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100">
+
+                        {support.requests.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan="6"
+                              className="p-12 text-center text-sm text-slate-500"
+                            >
+                              No support requests match these filters.
+                            </td>
+                          </tr>
+                        ) : (
+                          support.requests.map((request) => {
+                            const meta = supportStatusMeta(
+                              request.status
+                            );
+
+                            return (
+                              <tr
+                                key={request.id}
+                                className="transition hover:bg-slate-50"
+                              >
+
+                                <td className="table-cell">
+                                  <div className="flex items-center gap-3">
+
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-sm font-black text-white">
+                                      {request.user?.name
+                                        ?.charAt(0)
+                                        ?.toUpperCase() || 'U'}
+                                    </div>
+
+                                    <div>
+                                      <p className="font-bold text-black">
+                                        {request.user?.name || '—'}
+                                      </p>
+
+                                      <p className="text-xs text-slate-500">
+                                        {request.user?.email || '—'}
+                                      </p>
+                                    </div>
+
+                                  </div>
+                                </td>
+
+                                <td className="table-cell">
+                                  <span className="chip">
+                                    {supportCategoryLabel(
+                                      request.category
+                                    )}
+                                  </span>
+                                </td>
+
+                                <td className="table-cell">
+                                  <p className="max-w-xs truncate font-bold text-black">
+                                    {request.subject || '—'}
+                                  </p>
+                                </td>
+
+                                <td className="table-cell">
+                                  <span
+                                    className={`chip inline-flex items-center gap-1.5 border ${meta.className}`}
+                                  >
+                                    <meta.Icon size={13} />
+
+                                    {meta.label}
+                                  </span>
+                                </td>
+
+                                <td className="table-cell text-sm">
+                                  {request.createdAt
+                                    ? new Date(
+                                        request.createdAt
+                                      ).toLocaleDateString()
+                                    : '—'}
+                                </td>
+
+                                <td className="table-cell text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openSupportRequest(request)
+                                    }
+                                    title="Read the request and reply to the student"
+                                    className="btn-secondary inline-flex items-center gap-2 px-3 py-2 text-xs"
+                                  >
+                                    <ChevronRight size={14} />
+
+                                    {request.adminResponse
+                                      ? 'Manage'
+                                      : 'Open'}
+                                  </button>
+                                </td>
+
+                              </tr>
+                            );
+                          })
+                        )}
+
+                      </tbody>
+                    </table>
+
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+                    <p className="text-xs font-semibold text-slate-500">
+                      {support.total.toLocaleString()} request
+                      {support.total === 1 ? '' : 's'}
+                      {' · page '}
+                      {support.page} of {support.pages}
+                    </p>
+
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSupportPage((prev) => Math.max(1, prev - 1))
+                        }
+                        disabled={
+                          supportLoading || support.page <= 1
+                        }
+                        className="btn-secondary px-4 py-2 text-xs"
+                      >
+                        Previous
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSupportPage((prev) =>
+                            Math.min(support.pages, prev + 1)
+                          )
+                        }
+                        disabled={
+                          supportLoading ||
+                          support.page >= support.pages
+                        }
+                        className="btn-secondary px-4 py-2 text-xs"
+                      >
+                        Next
+                      </button>
+                    </div>
+
+                  </div>
+
+                </>
+              )}
+
+            </section>
+          )}
+
         </div>
       </main>
 
@@ -4555,6 +5251,217 @@ const AdminPanel = () => {
           action?.run();
         }}
       />
+
+      {/* ==================================================
+          SUPPORT REQUEST DETAIL
+          Reads the request in full and writes the reply back, which is the
+          only way a student's ticket can leave the queue.
+      ================================================== */}
+
+      {selectedRequest && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label={
+            selectedRequest.subject || 'Support request'
+          }
+        >
+          <div className="modal-card max-w-2xl">
+
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-6">
+              <div className="min-w-0">
+                <p className="eyebrow mb-2">
+                  Support request
+                </p>
+
+                <h3 className="truncate text-xl font-black text-black">
+                  {selectedRequest.subject || 'Untitled request'}
+                </h3>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeSupportRequest}
+                aria-label="Dismiss support request"
+                className="shrink-0 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-black"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-5 p-6">
+
+              {/* WHO RAISED IT */}
+
+              <div>
+                <p className="field-label">
+                  Requester
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-bold text-black">
+                    {selectedRequest.user?.name || '—'}
+                  </p>
+
+                  <p className="text-sm text-slate-500">
+                    {selectedRequest.user?.email || '—'}
+                  </p>
+
+                  <span className="chip capitalize">
+                    {selectedRequest.user?.role?.replace('_', ' ') ||
+                      'student'}
+                  </span>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="chip">
+                    {supportCategoryLabel(selectedRequest.category)}
+                  </span>
+
+                  <span
+                    className={`chip inline-flex items-center gap-1.5 border ${supportStatusMeta(
+                      selectedRequest.status
+                    ).className}`}
+                  >
+                    {supportStatusMeta(selectedRequest.status).label}
+                  </span>
+
+                  <span className="chip">
+                    {selectedRequest.createdAt
+                      ? `Raised ${new Date(
+                          selectedRequest.createdAt
+                        ).toLocaleDateString()}`
+                      : 'Date unavailable'}
+                  </span>
+                </div>
+              </div>
+
+              {/* WHAT THEY SAID */}
+
+              <div>
+                <p className="field-label">
+                  Description
+                </p>
+
+                <div className="soft-panel max-h-64 overflow-y-auto whitespace-pre-line text-sm leading-6 text-black">
+                  {selectedRequest.description ||
+                    'No description was provided.'}
+                </div>
+              </div>
+
+              {/* STATUS */}
+
+              <div>
+                <label className="field-label" htmlFor="support-status">
+                  Status *
+                </label>
+
+                <select
+                  id="support-status"
+                  value={draftStatus}
+                  onChange={(event) => {
+                    setDraftStatus(event.target.value);
+                    setSupportFormError(null);
+                  }}
+                  disabled={supportSaving}
+                  className="field"
+                >
+                  <option value="">
+                    Choose a status
+                  </option>
+
+                  {SUPPORT_STATUSES.map((statusKey) => (
+                    <option
+                      key={statusKey}
+                      value={statusKey}
+                    >
+                      {supportStatusMeta(statusKey).label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* REPLY */}
+
+              <div>
+                <div className="flex items-end justify-between gap-3">
+                  <label
+                    className="field-label mb-0"
+                    htmlFor="support-response"
+                  >
+                    Response to the student
+                  </label>
+
+                  <span className="shrink-0 text-xs font-semibold text-slate-500">
+                    {draftResponse.length}/{SUPPORT_RESPONSE_MAX}
+                  </span>
+                </div>
+
+                <textarea
+                  id="support-response"
+                  rows={6}
+                  value={draftResponse}
+                  onChange={(event) => {
+                    setDraftResponse(
+                      event.target.value.slice(
+                        0,
+                        SUPPORT_RESPONSE_MAX
+                      )
+                    );
+                    setSupportFormError(null);
+                  }}
+                  maxLength={SUPPORT_RESPONSE_MAX}
+                  disabled={supportSaving}
+                  placeholder="Say what you did, or what the student should do next."
+                  className="field mt-2 min-h-32 resize-y"
+                />
+
+                <p className="mt-2 text-xs text-slate-500">
+                  Marking a request resolved or closed notifies the student
+                  with this message.
+                  {selectedRequest.respondedAt &&
+                    ` Last answered ${new Date(
+                      selectedRequest.respondedAt
+                    ).toLocaleString()}.`}
+                </p>
+              </div>
+
+              {supportFormError && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                  {supportFormError}
+                </div>
+              )}
+
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-slate-200 p-6 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeSupportRequest}
+                disabled={supportSaving}
+                className="btn-secondary"
+              >
+                Close
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSupportSave}
+                disabled={supportSaving}
+                className="btn-primary flex items-center justify-center gap-2"
+              >
+                {supportSaving && (
+                  <RefreshCw size={16} className="animate-spin" />
+                )}
+
+                {supportSaving ? 'Saving...' : 'Save and reply'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 };

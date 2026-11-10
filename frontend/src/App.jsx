@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Routes, Route, useLocation } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import AIAgent from './components/AIAgent';
 
@@ -8,7 +8,6 @@ import AIAgent from './components/AIAgent';
 // dashboard with it.
 const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));
-const Contact = lazy(() => import('./pages/Contact'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const SetNewPassword = lazy(() => import('./pages/SetNewPassword'));
@@ -23,6 +22,7 @@ const Certificates = lazy(() => import('./pages/Certificates'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const Calendar = lazy(() => import('./pages/Calendar'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard'));
+const Help = lazy(() => import('./pages/Help'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 const RouteFallback = () => (
@@ -35,6 +35,16 @@ const RouteFallback = () => (
   </div>
 );
 
+// The campus assistant floats on every page except the Help Center, which has
+// its own ClubAssist. Both live in the same bottom-right corner, so showing
+// them together would stack one button on top of the other and make one of
+// them unreachable.
+const GlobalAgent = () => {
+  const { pathname } = useLocation();
+
+  return pathname === '/help' ? null : <AIAgent />;
+};
+
 function App() {
   return (
     <Router>
@@ -43,7 +53,9 @@ function App() {
           {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<About />} />
-          <Route path="/contact" element={<Contact />} />
+          {/* Support and documentation both live in the Help Center now; the
+              old marketing contact page had a form that went nowhere. */}
+          <Route path="/contact" element={<Navigate to="/help" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
@@ -105,6 +117,14 @@ function App() {
             </ProtectedRoute>
           } />
 
+          {/* Available to every signed-in role; the server decides which
+              guides each person is shown. */}
+          <Route path="/help" element={
+            <ProtectedRoute>
+              <Help />
+            </ProtectedRoute>
+          } />
+
           <Route path="/admin" element={
             <ProtectedRoute requiredRole="admin">
               <AdminPanel />
@@ -120,7 +140,7 @@ function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
-      <AIAgent />
+      <GlobalAgent />
     </Router>
   );
 }

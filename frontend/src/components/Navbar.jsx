@@ -369,7 +369,10 @@ const Navbar = () => {
   const links = [
     { to: '/', label: 'Home' },
     { to: '/about', label: 'About' },
-    { to: '/contact', label: 'Contact' },
+    // Support needs a signed-in account (tickets belong to a user and the
+    // guides are role-filtered), so logged-out visitors land on the login page
+    // from here rather than on the retired Contact form.
+    { to: '/help', label: 'Help & Support' },
 
     ...(user?.name
       ? [

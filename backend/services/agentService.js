@@ -8,7 +8,9 @@ import { GROQ_API_KEY, GROQ_MODEL } from "../config/env.js";
 // first request instead so only the assistant is affected.
 let client = null;
 
-const getClient = () => {
+// Exported so the help assistant reuses this one client and its key handling
+// instead of constructing a second Groq connection.
+export const getGroqClient = () => {
   if (!GROQ_API_KEY) {
     throw new Error(
       "The AI assistant is not configured. Set GROQ_API_KEY on the server."
@@ -27,7 +29,7 @@ const agentService = {
         throw new Error("Message is required");
       }
 
-      const client = getClient();
+      const client = getGroqClient();
       const campus = await buildCampusContext(user);
 
       const systemPrompt = `
