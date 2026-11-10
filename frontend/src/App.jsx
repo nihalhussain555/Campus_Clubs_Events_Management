@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Navigate, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import AIAgent from './components/AIAgent';
 
@@ -8,6 +8,7 @@ import AIAgent from './components/AIAgent';
 // dashboard with it.
 const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));
+const Contact = lazy(() => import('./pages/Contact'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const SetNewPassword = lazy(() => import('./pages/SetNewPassword'));
@@ -53,9 +54,7 @@ function App() {
           {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<About />} />
-          {/* Support and documentation both live in the Help Center now; the
-              old marketing contact page had a form that went nowhere. */}
-          <Route path="/contact" element={<Navigate to="/help" replace />} />
+          <Route path="/contact" element={<Contact />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 

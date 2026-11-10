@@ -14,6 +14,7 @@ import {
   FileText,
   Sun,
   Moon,
+  HelpCircle,
   GraduationCap
 } from 'lucide-react';
 
@@ -369,10 +370,7 @@ const Navbar = () => {
   const links = [
     { to: '/', label: 'Home' },
     { to: '/about', label: 'About' },
-    // Support needs a signed-in account (tickets belong to a user and the
-    // guides are role-filtered), so logged-out visitors land on the login page
-    // from here rather than on the retired Contact form.
-    { to: '/help', label: 'Help & Support' },
+    { to: '/contact', label: 'Contact' },
 
     ...(user?.name
       ? [
@@ -1035,6 +1033,30 @@ const Navbar = () => {
                   )}
 
 
+                  {/* HELP & SUPPORT */}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+
+                      closeMenu();
+
+                      navigate(
+                        '/help'
+                      );
+
+                    }}
+
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-700 hover:bg-[#e8f5fb] hover:text-[#145f82]"
+                  >
+
+                    <HelpCircle size={16} />
+
+                    Help & Support
+
+                  </button>
+
+
                   {/* LOGOUT */}
 
                   <button
@@ -1199,6 +1221,28 @@ const Navbar = () => {
                   <FileText size={16} />
 
                   My Certificates
+
+                </button>
+
+
+                <button
+                  type="button"
+                  onClick={() => {
+
+                    closeMenu();
+
+                    navigate(
+                      '/help'
+                    );
+
+                  }}
+
+                  className="btn-secondary w-full"
+                >
+
+                  <HelpCircle size={16} />
+
+                  Help & Support
 
                 </button>
 
