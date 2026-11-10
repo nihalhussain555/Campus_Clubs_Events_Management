@@ -502,4 +502,38 @@ export const gamificationAPI = {
     api.get('/gamification/export', { params, responseType: 'blob' })
 };
 
+// =====================================================
+// EXTERNAL EVENTS API
+// =====================================================
+
+// Off-campus listings. Nothing here registers anyone anywhere: following the
+// organiser's own link is the only way to sign up, and saving a listing is a
+// private bookmark.
+export const externalEventAPI = {
+  // { type, mode, organizer, city, search, view, saved, page, limit }
+  getAll: (params) => api.get('/external-events', { params }),
+
+  // The category, mode and status taxonomies plus the real organizer and city
+  // lists, so the filter controls can never offer a value the server rejects.
+  getMeta: () => api.get('/external-events/meta'),
+
+  getById: (id) => api.get(`/external-events/${id}`),
+
+  // club leader or admin
+  create: (payload) => api.post('/external-events', payload),
+
+  update: (id, payload) => api.put(`/external-events/${id}`, payload),
+
+  remove: (id) => api.delete(`/external-events/${id}`),
+
+  save: (id) =>
+    api
+      .post(`/external-events/${id}/bookmark`)
+      .then(extractData)
+      .catch(handleDuplicateActionError),
+
+  unsave: (id) =>
+    api.delete(`/external-events/${id}/bookmark`)
+};
+
 export default api;

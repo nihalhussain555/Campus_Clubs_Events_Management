@@ -69,6 +69,16 @@ const userSchema = new mongoose.Schema({
     }
   ],
 
+  // Saved off-campus listings. A reference only: saving an external event does
+  // not register anyone anywhere, because that still happens on the organiser's
+  // own site. Same shape and limits as calendarEvents above.
+  bookmarkedExternalEvents: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ExternalEvent'
+    }
+  ],
+
   registeredEvents: [
     {
       type: mongoose.Schema.Types.ObjectId,

@@ -3277,6 +3277,442 @@ await test('ticket fields survive injection-shaped input', async () => {
   assert.equal(await SupportRequest.countDocuments({ _id: { $ne: null } }), 4);
 });
 
+// ------------------------------------------------- external events
+
+const ExternalEvent = (await import('../models/ExternalEvent.js')).default;
+
+const extStudent = await makeUser('Erin External', 'extstudent@test.dev');
+const extLeader = await makeUser('Eli External', 'extleader@test.dev', 'club_leader');
+const extLeader2 = await makeUser('Elle Second', 'extleader2@test.dev', 'club_leader');
+
+const EXT_PATH = '/external-events';
+
+const extBody = (overrides = {}) => ({
+  title: 'National Hackathon 2026',
+  description: 'A 24 hour build competition hosted by another college.',
+  organizerName: 'Vertex Institute of Technology',
+  eventType: 'hackathon',
+  participationMode: 'offline',
+  registrationUrl: 'https://vertexhack.example.org/apply',
+  date: future(96),
+  registrationDeadline: future(48),
+  venue: 'Main Auditorium',
+  city: 'Bengaluru',
+  ...overrides
+});
+
+const createExt = async (token, overrides) =>
+  call('POST', EXT_PATH, { token, body: extBody(overrides) });
+
+await test('external event routes require a signed-in account', async () => {
+  assert.equal((await call('GET', EXT_PATH)).status, 401);
+  assert.equal((await call('POST', EXT_PATH, { body: extBody() })).status, 401);
+  assert.equal(
+    (await call('POST', `${EXT_PATH}/000000000000000000000001/bookmark`)).status,
+    401
+  );
+});
+
+await test('only club leaders and administrators can post external events', async () => {
+  const denied = await createExt(extStudent.token, { title: 'Student Attempt Event' });
+  assert.equal(denied.status, 403, 'a student was allowed to create');
+
+  const asLeader = await createExt(extLeader.token, { title: 'Leader Listing Alpha' });
+  assert.equal(asLeader.status, 201, 'a club leader was refused');
+  assert.equal(asLeader.data.event.postedBy.id, extLeader.id);
+
+  const asAdmin = await createExt(admin.token, {
+    title: 'Admin Listing Beta',
+    organizerName: 'State Tech Society',
+    eventType: 'conference',
+    participationMode: 'online',
+    registrationUrl: 'https://statetech.example.com/reg',
+    platformDetails: 'Zoom link is mailed after sign-up'
+  });
+  assert.equal(asAdmin.status, 201);
+  assert.equal(asAdmin.data.event.status, 'upcoming');
+});
+
+await test('external event fields are validated before they reach the database', async () => {
+  const before = await ExternalEvent.countDocuments();
+
+  const bad = [
+    { title: 'ab' },
+    { description: 'too short' },
+    { organizerName: 'x' },
+    { eventType: 'ballroom_dancing' },
+    { participationMode: 'telepathic' },
+    { status: 'half_done' },
+    { date: 'not-a-date' },
+    { registrationDeadline: future(200) },
+    { participationMode: 'offline', venue: '' },
+    { participationMode: 'hybrid', city: '' },
+    { club: 'nonsense' }
+  ];
+
+  for (const overrides of bad) {
+    const { status, data } = await createExt(extLeader.token, overrides);
+
+    assert.equal(status, 400, `accepted ${JSON.stringify(overrides)}`);
+    assert.equal(data.success, false);
+  }
+
+  assert.equal(await ExternalEvent.countDocuments(), before);
+});
+
+await test('registration links must be real public web addresses', async () => {
+  const rejected = [
+    'definitely not a url',
+    'javascript:alert(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'ftp://files.example.org/hack',
+    'http://localhost:5000/apply',
+    'https://192.168.1.12/apply',
+    'https://user:password@vertex.example.org/apply',
+    'https://vertex',
+    ''
+  ];
+
+  for (const registrationUrl of rejected) {
+    const { status, data } = await createExt(extLeader.token, {
+      title: `Link Test ${rejected.indexOf(registrationUrl)}`,
+      registrationUrl
+    });
+
+    assert.equal(status, 400, `accepted the link ${registrationUrl || '(empty)'}`);
+    assert.ok(data.message, 'rejection without a message');
+  }
+
+  const ok = await createExt(extLeader.token, {
+    title: 'Good Link Listing',
+    registrationUrl: 'https://devfolio.co/hack2026'
+  });
+
+  assert.equal(ok.status, 201);
+  assert.ok(ok.data.event.registrationUrl.startsWith('https://devfolio.co'));
+  assert.equal(ok.data.event.registrationHost, 'devfolio.co');
+});
+
+await test('participation mode decides which location fields survive', async () => {
+  const online = await createExt(extLeader.token, {
+    title: 'Online Only Listing',
+    eventType: 'webinar',
+    participationMode: 'online',
+    registrationUrl: 'https://webinar.example.org/join',
+    venue: 'Should be dropped',
+    city: 'Should be dropped',
+    locationDetails: 'Should be dropped',
+    platformDetails: 'Live on YouTube'
+  });
+
+  assert.equal(online.status, 201);
+  assert.equal(online.data.event.venue, '');
+  assert.equal(online.data.event.city, '');
+  assert.equal(online.data.event.platformDetails, 'Live on YouTube');
+
+  const offline = await createExt(extLeader.token, {
+    title: 'Offline Only Listing',
+    participationMode: 'offline',
+    registrationUrl: 'https://offline.example.org/form',
+    platformDetails: 'Should be dropped'
+  });
+
+  assert.equal(offline.status, 201);
+  assert.equal(offline.data.event.platformDetails, '');
+  assert.equal(offline.data.event.venue, 'Main Auditorium');
+
+  const hybrid = await createExt(extLeader.token, {
+    title: 'Hybrid Listing',
+    participationMode: 'hybrid',
+    registrationUrl: 'https://hybrid.example.org/reg'
+  });
+
+  assert.equal(hybrid.status, 201);
+  assert.equal(hybrid.data.event.venue, 'Main Auditorium');
+});
+
+await test('posters accept a downscaled image or a public link only', async () => {
+  const small = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
+
+  const uploaded = await createExt(extLeader.token, {
+    title: 'Poster Upload Listing',
+    imageUrl: small
+  });
+
+  assert.equal(uploaded.status, 201);
+  assert.equal(uploaded.data.event.imageUrl, small);
+
+  const linked = await createExt(extLeader.token, {
+    title: 'Poster Link Listing',
+    imageUrl: 'https://cdn.example.org/poster.jpg'
+  });
+
+  assert.equal(linked.status, 201);
+
+  const spoof = await createExt(extLeader.token, {
+    title: 'Poster Spoof Listing',
+    imageUrl: 'data:text/html;base64,PHNjcmlwdD4='
+  });
+
+  assert.equal(spoof.status, 400, 'a non-image data URL was stored');
+
+  const huge = await createExt(extLeader.token, {
+    title: 'Poster Huge Listing',
+    imageUrl: `data:image/png;base64,${'A'.repeat(950000)}`
+  });
+
+  assert.equal(huge.status, 413, 'an oversized poster was accepted');
+
+  assert.equal(
+    await ExternalEvent.countDocuments({ title: 'Poster Huge Listing' }),
+    0
+  );
+});
+
+await test('a leader cannot rewrite another leader’s listing but an admin can', async () => {
+  const mine = await createExt(extLeader.token, { title: 'Ownership Test Listing' });
+  assert.equal(mine.status, 201);
+
+  const id = mine.data.event.id;
+
+  const byStranger = await call('PUT', `${EXT_PATH}/${id}`, {
+    token: extLeader2.token,
+    body: extBody({ title: 'Hijacked By Another Leader' })
+  });
+
+  assert.equal(byStranger.status, 403);
+
+  const byStudent = await call('DELETE', `${EXT_PATH}/${id}`, { token: extStudent.token });
+  assert.equal(byStudent.status, 403);
+
+  const byOwner = await call('PUT', `${EXT_PATH}/${id}`, {
+    token: extLeader.token,
+    body: extBody({ title: 'Renamed By Its Own Leader', status: 'completed' })
+  });
+
+  assert.equal(byOwner.status, 200);
+  assert.equal(byOwner.data.event.title, 'Renamed By Its Own Leader');
+  assert.equal(byOwner.data.event.status, 'completed');
+
+  const byAdmin = await call('PUT', `${EXT_PATH}/${id}`, {
+    token: admin.token,
+    body: extBody({ title: 'Renamed By An Administrator' })
+  });
+
+  assert.equal(byAdmin.status, 200);
+
+  const removed = await call('DELETE', `${EXT_PATH}/${id}`, { token: admin.token });
+  assert.equal(removed.status, 200);
+  assert.equal(await ExternalEvent.countDocuments({ _id: id }), 0);
+});
+
+await test('saving a listing bookmarks it without claiming a registration', async () => {
+  const listing = await createExt(extLeader.token, { title: 'Bookmark Target Listing' });
+  const id = listing.data.event.id;
+
+  const first = await call('POST', `${EXT_PATH}/${id}/bookmark`, { token: extStudent.token });
+
+  assert.equal(first.status, 201);
+  assert.equal(first.data.bookmarked, true);
+  assert.equal(first.data.already, false);
+  assert.match(first.data.message, /does not register/i);
+
+  const second = await call('POST', `${EXT_PATH}/${id}/bookmark`, { token: extStudent.token });
+
+  assert.equal(second.status, 200);
+  assert.equal(second.data.already, true);
+  assert.equal(second.data.bookmarkIds.length, 1, 'a double click saved it twice');
+
+  const listed = await call('GET', `${EXT_PATH}?view=all&saved=true`, { token: extStudent.token });
+
+  assert.equal(listed.status, 200);
+  assert.equal(listed.data.events.length, 1);
+  assert.equal(listed.data.events[0].id, id);
+  assert.equal(listed.data.events[0].bookmarked, true);
+  assert.equal(listed.data.counts.saved, 1);
+
+  const otherSaw = await call('GET', `${EXT_PATH}?view=all`, { token: extLeader2.token });
+  const seen = otherSaw.data.events.find((event) => event.id === id);
+  assert.equal(seen.bookmarked, false, 'one student’s save leaked to another');
+
+  const dropped = await call('DELETE', `${EXT_PATH}/${id}/bookmark`, { token: extStudent.token });
+
+  assert.equal(dropped.status, 200);
+  assert.equal(dropped.data.bookmarked, false);
+
+  const stored = await User.findById(extStudent.id).select('bookmarkedExternalEvents').lean();
+  assert.equal(stored.bookmarkedExternalEvents.length, 0);
+});
+
+await test('saving a listing that does not exist is refused', async () => {
+  const ghost = await call('POST', `${EXT_PATH}/000000000000000000000fed/bookmark`, {
+    token: extStudent.token,
+  });
+
+  assert.equal(ghost.status, 404);
+
+  const invalid = await call('POST', `${EXT_PATH}/nonsense/bookmark`, {
+    token: extStudent.token,
+  });
+
+  assert.equal(invalid.status, 400);
+});
+
+await test('deleting a listing clears it from every saved list', async () => {
+  const doomed = await createExt(extLeader.token, { title: 'Doomed Listing' });
+  const id = doomed.data.event.id;
+
+  assert.equal((await call('POST', `${EXT_PATH}/${id}/bookmark`, { token: extStudent.token })).status, 201);
+  assert.equal((await call('POST', `${EXT_PATH}/${id}/bookmark`, { token: extLeader2.token })).status, 201);
+
+  assert.equal((await call('DELETE', EXT_PATH + `/${id}`, { token: extLeader.token })).status, 200);
+
+  const students = await User.find({ bookmarkedExternalEvents: id }).lean();
+  assert.equal(students.length, 0, 'a dead reference survived in a bookmark list');
+});
+
+await test('the listing browse filters by type, mode, organizer, search and view', async () => {
+  // One page wide enough to hold every listing these tests have created, so an
+  // assertion below is about filtering and never about where a row paginated to.
+  const list = (query) =>
+    call('GET', `${EXT_PATH}?limit=100&${query}`, { token: extStudent.token });
+
+  const expectCreated = (response) => {
+    assert.equal(response.status, 201, response.data?.message);
+    return response.data.event;
+  };
+
+  expectCreated(await createExt(extLeader.token, {
+    title: 'Spring Hack Offline',
+    organizerName: 'Northgate College',
+    eventType: 'hackathon',
+    participationMode: 'offline',
+    registrationUrl: 'https://northgate.example.org/hack',
+    date: future(96),
+    registrationDeadline: future(48),
+    city: 'Chennai'
+  }));
+
+  const pastOne = expectCreated(await createExt(extLeader.token, {
+    title: 'Old Conference Listing',
+    organizerName: 'Southbank University',
+    eventType: 'conference',
+    participationMode: 'offline',
+    registrationUrl: 'https://southbank.example.org/2020',
+    date: past(24),
+    registrationDeadline: past(72),
+    city: 'Chennai'
+  }));
+
+  const done = expectCreated(await createExt(extLeader.token, {
+    title: 'Finished Workshop Listing',
+    organizerName: 'Northgate College',
+    eventType: 'workshop',
+    participationMode: 'online',
+    registrationUrl: 'https://northgate.example.org/workshop',
+    status: 'completed',
+    date: future(24),
+    registrationDeadline: future(12)
+  }));
+
+  const upcoming = await list('view=upcoming');
+  assert.equal(upcoming.status, 200);
+
+  const upcomingTitles = upcoming.data.events.map((event) => event.title);
+  assert.ok(upcomingTitles.includes('Spring Hack Offline'), 'the new upcoming listing was not listed');
+  assert.ok(!upcomingTitles.includes('Old Conference Listing'), 'a past listing showed as upcoming');
+  assert.ok(!upcomingTitles.includes('Finished Workshop Listing'), 'a completed listing showed as upcoming');
+
+  const expired = await list('view=expired');
+  const expiredTitles = expired.data.events.map((event) => event.title);
+  assert.ok(expiredTitles.includes('Old Conference Listing'), 'a past listing was missing from expired');
+  assert.ok(expiredTitles.includes('Finished Workshop Listing'), 'a completed listing was missing from expired');
+  assert.ok(!expiredTitles.includes('Spring Hack Offline'), 'an upcoming listing showed as expired');
+
+  const byType = await list('view=all&type=workshop');
+  assert.ok(byType.data.events.length >= 1, 'the type filter returned nothing');
+  assert.ok(byType.data.events.every((event) => event.eventType === 'workshop'), 'the type filter leaked other types');
+
+  const byMode = await list('view=all&mode=online');
+  assert.ok(byMode.data.events.every((event) => event.participationMode === 'online'), 'the mode filter leaked other modes');
+
+  const byOrganizer = await list(`view=all&organizer=${encodeURIComponent('Southbank University')}`);
+  assert.equal(byOrganizer.data.events.length, 1, 'the organizer filter matched the wrong rows');
+  assert.equal(byOrganizer.data.events[0].title, 'Old Conference Listing');
+
+  const byCity = await list('view=all&city=Chennai');
+  assert.ok(byCity.data.events.length >= 2, 'the city filter missed the listings it was meant to match');
+
+  const searched = await list('view=all&search=hack');
+  assert.ok(searched.data.events.length >= 1, 'search found nothing');
+
+  const regexSearch = await list(`view=all&search=${encodeURIComponent('(hack')}`);
+  assert.equal(regexSearch.status, 200, 'an unescaped search broke the query');
+  assert.equal(regexSearch.data.events.length, 0);
+
+  const badType = await call('GET', `${EXT_PATH}?type=quidditch`, { token: extStudent.token });
+  assert.equal(badType.status, 400);
+
+  const single = await call('GET', `${EXT_PATH}/${pastOne.id}`, { token: extStudent.token });
+  assert.equal(single.status, 200);
+  assert.equal(single.data.event.isPast, true);
+
+  const deadlineSingle = await call('GET', `${EXT_PATH}/${done.id}`, {
+    token: extStudent.token,
+  });
+  assert.equal(deadlineSingle.data.event.deadlinePassed, false);
+
+  const missing = await call('GET', `${EXT_PATH}/000000000000000000000fee`, {
+    token: extStudent.token,
+  });
+  assert.equal(missing.status, 404);
+});
+
+await test('meta publishes the taxonomy and the real organizer list', async () => {
+  const { status, data } = await call('GET', `${EXT_PATH}/meta`, { token: extStudent.token });
+
+  assert.equal(status, 200);
+  assert.equal(data.types.length, 7);
+  assert.ok(data.types.find((type) => type.value === 'coding_competition').label);
+  assert.equal(data.modes.map((mode) => mode.value).join(','), 'online,offline,hybrid');
+  assert.equal(data.statuses.length, 3);
+  assert.ok(data.organizers.includes('Northgate College'));
+  assert.ok(data.cities.includes('Chennai'));
+});
+
+await test('external events never touch the internal event machine', async () => {
+  const internalBefore = await Event.countDocuments();
+  const registrationsBefore = await User.countDocuments({ registeredEvents: { $ne: [] } });
+
+  const external = await createExt(extLeader.token, {
+    title: 'Isolation Probe Listing',
+    participationMode: 'online',
+    eventType: 'hackathon',
+    registrationUrl: 'https://probe.example.org/apply'
+  });
+
+  assert.equal(external.status, 201);
+
+  const externalId = external.data.event.id;
+
+  assert.equal(await Event.countDocuments(), internalBefore, 'an external listing created an Event row');
+
+  // The internal endpoints must treat the external id as unknown rather than
+  // registering, checking in, or awarding anything for it.
+  assert.equal((await call('POST', `/events/${externalId}/register`, { token: extStudent.token })).status, 404);
+  assert.equal((await call('GET', `/events/${externalId}`, { token: extStudent.token })).status, 404);
+  assert.equal(
+    (await call('POST', `/calendar/events`, { token: extStudent.token, body: { eventId: externalId } })).status,
+    404
+  );
+
+  assert.equal(await User.countDocuments({ registeredEvents: { $ne: [] } }), registrationsBefore);
+
+  // The reminder sweep is a Event collection job, so a 30-minute notice can only
+  // ever fire for something on the campus schedule.
+  assert.equal(await Event.countDocuments({ reminderSentAt: null, date: external.data.event.date }), 0);
+});
+
 // ---------------------------------------------------------------- summary
 
 const failed = results.filter((r) => r[0] === 'FAIL');

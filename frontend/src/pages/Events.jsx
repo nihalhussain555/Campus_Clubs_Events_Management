@@ -21,6 +21,7 @@ import EmptyState from '../components/EmptyState';
 import Pagination from '../components/Pagination';
 import EventCheckInDesk from '../components/EventCheckInDesk';
 import AddToCalendar from '../components/AddToCalendar';
+import ExternalEvents from './ExternalEvents';
 
 import { clubAPI, eventAPI } from '../services/api';
 import { withInstantTimes } from '../utils/eventTime';
@@ -83,6 +84,10 @@ const Events = () => {
 
   const [sortBy, setSortBy] =
     useState('date');
+
+  // 'campus' is the original list; 'external' shows off-campus listings.
+  const [activeTab, setActiveTab] =
+    useState('campus');
 
   const [formData, setFormData] = useState({
     title: '',
@@ -722,6 +727,53 @@ const Events = () => {
   }
 
 
+  const eventTabs = (
+    <div
+      className="mb-6 flex flex-wrap gap-2"
+      role="tablist"
+      aria-label="Event sources"
+    >
+      {[
+        { value: 'campus', label: 'Campus events' },
+        { value: 'external', label: 'External events' }
+      ].map((tab) => (
+        <button
+          key={tab.value}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === tab.value}
+          onClick={() => setActiveTab(tab.value)}
+          className={`filter-pill ${
+            activeTab === tab.value ? 'filter-pill-active' : ''
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+
+
+  // The external listings live in their own collection and their own
+  // components, so switching here changes nothing about how the campus list
+  // below loads, filters or registers.
+  if (activeTab === 'external') {
+    return (
+      <div className="app-page">
+        <Navbar />
+
+        <main className="page-section pt-8">
+          <div className="page-container">
+            {eventTabs}
+
+            <ExternalEvents />
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+
   // =====================================================
   // UI
   // =====================================================
@@ -744,6 +796,8 @@ const Events = () => {
       <main className="page-section pt-8">
 
         <div className="page-container">
+
+          {eventTabs}
 
           {/* HEADER */}
 
