@@ -228,13 +228,9 @@ const ExternalEvents = () => {
     setDetail(null);
   };
 
-  // A new organizer or city only exists once it has been posted, so the filter
-  // options are re-read alongside the list.
-  const onSaved = (message) => {
-    setShowForm(false);
-    setEditing(null);
-    setToast({ message: message || 'Listing saved', type: 'success' });
-
+  // Organizer and city options only exist as long as a listing does, so both
+  // the publish and the delete paths re-read them.
+  const refreshMeta = () =>
     externalEventAPI
       .getMeta()
       .then((response) =>
@@ -245,6 +241,13 @@ const ExternalEvents = () => {
         }))
       )
       .catch(() => {});
+
+  const onSaved = (message) => {
+    setShowForm(false);
+    setEditing(null);
+    setToast({ message: message || 'Listing saved', type: 'success' });
+
+    refreshMeta();
 
     if (page === 1) {
       runQuery();
@@ -297,6 +300,12 @@ const ExternalEvents = () => {
           current.saved + (listing.bookmarked ? -1 : 1)
         )
       }));
+
+      // In the Saved view a removed listing has to leave the list, not just
+      // change its own button.
+      if (view === 'saved' && listing.bookmarked) {
+        runQuery();
+      }
     } catch (error) {
       setToast({
         message:
@@ -325,6 +334,7 @@ const ExternalEvents = () => {
       });
 
       setDetail(null);
+      refreshMeta();
       runQuery();
     } catch (error) {
       setToast({
