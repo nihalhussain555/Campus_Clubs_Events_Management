@@ -277,6 +277,19 @@ const Login = () => {
 
         </form>
 
+        {/* FORGOT PASSWORD */}
+        <p className="mt-5 text-center text-sm font-semibold text-slate-600">
+          Forgot your password?
+
+          <button
+            type="button"
+            onClick={() => navigate('/forgot-password')}
+            className="ml-2 font-black text-[#145f82] hover:text-black"
+          >
+            Answer your security question
+          </button>
+        </p>
+
         {/* REGISTER */}
         <p className="mt-7 text-center text-sm font-semibold text-slate-600">
           Do not have an account?

@@ -7,17 +7,27 @@ import {
   JWT_SECRET,
   JWT_EXPIRES_IN,
   TEMP_PASSWORD_TTL_HOURS,
-  PASSWORD_SETUP_TOKEN_TTL
+  PASSWORD_SETUP_TOKEN_TTL,
+  PASSWORD_RECOVERY_TOKEN_TTL
 } from '../config/env.js';
 import {
   normalizeRole,
-  PASSWORD_SETUP_PURPOSE
+  PASSWORD_SETUP_PURPOSE,
+  PASSWORD_ANSWER_PURPOSE,
+  PASSWORD_RESET_PURPOSE
 } from '../middleware/authMiddleware.js';
 import {
   isStrongPassword,
   PASSWORD_REQUIREMENT_TEXT
 } from '../utils/passwordPolicy.js';
 import { generateTemporaryPassword } from '../utils/tempPassword.js';
+import {
+  SECURITY_QUESTIONS,
+  isSecurityQuestion,
+  normalizeSecurityAnswer,
+  securityAnswerFailure,
+  securityQuestionLabel
+} from '../utils/securityQuestions.js';
 import { audit } from '../services/auditService.js';
 
 const generateToken = (id, role) => {
@@ -33,20 +43,24 @@ const generateToken = (id, role) => {
   );
 };
 
-// Grants access to the password-setup endpoint and nothing else.
-const generateSetupToken = (id, role) => {
+// Grants access to one purpose-tagged endpoint and nothing else; verifyToken
+// refuses any token that carries a purpose claim.
+const generatePurposeToken = (id, role, purpose, expiresIn) => {
   return jwt.sign(
     {
       id: id.toString(),
       role,
-      purpose: PASSWORD_SETUP_PURPOSE
+      purpose
     },
     JWT_SECRET,
     {
-      expiresIn: PASSWORD_SETUP_TOKEN_TTL
+      expiresIn
     }
   );
 };
+
+const generateSetupToken = (id, role) =>
+  generatePurposeToken(id, role, PASSWORD_SETUP_PURPOSE, PASSWORD_SETUP_TOKEN_TTL);
 
 // Must match the truncation the schema default applies, for the reason noted
 // there: verifyToken compares this against the token's iat.
@@ -93,7 +107,9 @@ export const signup = async (req, res) => {
       year,
       section,
       semester,
-      dob
+      dob,
+      securityQuestion,
+      securityAnswer
     } = req.body;
 
     if (
@@ -113,6 +129,21 @@ export const signup = async (req, res) => {
       return res.status(400).json({ message: PASSWORD_REQUIREMENT_TEXT });
     }
 
+    // The recovery question is part of registration, not an optional extra: an
+    // account that never chose one has no answer hash to verify later, so it
+    // could not recover a forgotten password at all.
+    if (!isSecurityQuestion(securityQuestion)) {
+      return res.status(400).json({
+        message: 'Please choose a security question'
+      });
+    }
+
+    const answerFailure = securityAnswerFailure(securityAnswer);
+
+    if (answerFailure) {
+      return res.status(400).json({ message: answerFailure });
+    }
+
     const existingUser = await User.findOne({
       email: email.toLowerCase().trim()
     });
@@ -125,6 +156,15 @@ export const signup = async (req, res) => {
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
+
+    // The answer is kept only as a bcrypt hash of its normalised form, never in
+    // plain text, and it gets its own salt so the two hashes on this document
+    // do not share one.
+    const answerSalt = await bcrypt.genSalt(10);
+    const hashedAnswer = await bcrypt.hash(
+      normalizeSecurityAnswer(securityAnswer),
+      answerSalt
+    );
 
     // SECURITY:
     // New users should always be students.
@@ -141,7 +181,9 @@ export const signup = async (req, res) => {
       address,
       year,
       section,
-      semester
+      semester,
+      securityQuestion,
+      securityAnswerHash: hashedAnswer
     };
 
     if (gender) {
@@ -373,6 +415,11 @@ const profilePayload = async (user) => {
       memberCount: (club.members || []).length,
       logo: club.logo
     })),
+
+    // Just the question id, so Account & Settings can preselect it and say
+    // whether recovery is available for this account. The answer itself is
+    // stored only as a hash and no endpoint returns it.
+    securityQuestion: user.securityQuestion || null,
 
     createdAt: user.createdAt
   };
@@ -891,6 +938,291 @@ export const regenerateTemporaryPassword = async (req, res) => {
     });
   } catch (error) {
     console.error('Regenerate temporary password error:', error);
+
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// =====================================================
+// PASSWORD RECOVERY WITH A SECURITY QUESTION
+// =====================================================
+// No email and no OTP: an account that lost its password proves itself with
+// the question it answered when it was created. The flow is three steps and
+// each one hands out a purpose-tagged link that only unlocks the next step, so
+// nothing here ever becomes a session until the new password is written.
+
+// The answer to a question the account already chose, in the platform's own
+// words, is not a secret worth protecting. Which emails have accounts is, so
+// both "no such account" and "that account has no question" answer the same way.
+const RECOVERY_UNAVAILABLE_MESSAGE =
+  'We could not match a recovery question to that email. If an administrator ' +
+  'opened your account, or it was created before recovery questions existed, ' +
+  'ask them to issue a temporary password instead.';
+
+// Public because the signup form needs the catalogue before anyone has a token.
+export const getSecurityQuestions = async (req, res) => {
+  res.status(200).json({
+    questions: SECURITY_QUESTIONS
+  });
+};
+
+// Step 1: name the account and get back the question it has to answer.
+export const requestRecoveryQuestion = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({
+        message: 'Please enter the email you registered with'
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const user = await User.findOne({ email: normalizedEmail });
+
+    if (!user || !user.securityQuestion) {
+      audit('recovery_unavailable', {
+        email: normalizedEmail,
+        accountFound: Boolean(user)
+      });
+
+      return res.status(404).json({ message: RECOVERY_UNAVAILABLE_MESSAGE });
+    }
+
+    // The link carries the account id, so the two later steps never take an
+    // email again and cannot be pointed at some other account.
+    res.status(200).json({
+      message: 'Answer this question to continue.',
+      question: securityQuestionLabel(user.securityQuestion),
+      answerToken: generatePurposeToken(
+        user._id,
+        user.role,
+        PASSWORD_ANSWER_PURPOSE,
+        PASSWORD_RECOVERY_TOKEN_TTL
+      )
+    });
+  } catch (error) {
+    console.error('Recovery question request error:', error);
+
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// Step 2: check the answer. Reached with the answer link only, and the account
+// arrives already loaded with its hidden credential fields.
+export const verifyRecoveryAnswer = async (req, res) => {
+  try {
+    const { answer } = req.body;
+
+    const failure = securityAnswerFailure(answer);
+
+    if (failure) {
+      return res.status(400).json({ message: failure });
+    }
+
+    const user = req.recoveryUser;
+
+    // A question with no answer hash is not an account that can be recovered,
+    // however it came to have one. Rejected outright rather than compared
+    // against an empty hash, which bcrypt reads as malformed.
+    if (!user.securityAnswerHash) {
+      return res.status(404).json({ message: RECOVERY_UNAVAILABLE_MESSAGE });
+    }
+
+    const isMatch = await bcrypt.compare(
+      normalizeSecurityAnswer(answer),
+      user.securityAnswerHash
+    );
+
+    if (!isMatch) {
+      audit('recovery_answer_failed', {
+        userId: user._id,
+        email: user.email,
+        role: user.role
+      });
+
+      return res.status(401).json({
+        message: 'That answer does not match our records.'
+      });
+    }
+
+    audit('recovery_answer_verified', {
+      userId: user._id,
+      email: user.email,
+      role: user.role
+    });
+
+    res.status(200).json({
+      message: 'Answer accepted. Please choose a new password.',
+      resetToken: generatePurposeToken(
+        user._id,
+        user.role,
+        PASSWORD_RESET_PURPOSE,
+        PASSWORD_RECOVERY_TOKEN_TTL
+      )
+    });
+  } catch (error) {
+    console.error('Recovery answer error:', error);
+
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// Step 3: write the new password. Only the reset link reaches this.
+export const resetPasswordWithRecovery = async (req, res) => {
+  try {
+    const { newPassword, confirmPassword } = req.body;
+
+    if (typeof newPassword !== 'string' || !newPassword) {
+      return res.status(400).json({ message: 'Please provide a new password' });
+    }
+
+    if (confirmPassword !== newPassword) {
+      return res.status(400).json({
+        message: 'New password and confirmation do not match'
+      });
+    }
+
+    if (!isStrongPassword(newPassword)) {
+      return res.status(400).json({ message: PASSWORD_REQUIREMENT_TEXT });
+    }
+
+    const user = req.recoveryUser;
+
+    // The forgotten password is still the stored one, so this is what stops a
+    // "recovery" from simply giving it back.
+    const reusesCurrent = await bcrypt.compare(newPassword, user.password);
+
+    if (reusesCurrent) {
+      return res.status(400).json({
+        message:
+          'Please choose a password other than the one you just recovered.'
+      });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+
+    user.password = await bcrypt.hash(newPassword, salt);
+    user.passwordChangedAt = secondAlignedTimestamp();
+
+    // An account can still be carrying an administrator's temporary password
+    // when it gets here, if its owner set a recovery question before finishing
+    // setup. This password is self-chosen and strong, which is exactly what
+    // that requirement asks for; leaving the flag set would sign the user in
+    // and bounce them straight back to the setup page.
+    user.isFirstLogin = false;
+    user.mustChangePassword = false;
+    user.temporaryPasswordExpiresAt = null;
+
+    await user.save();
+
+    audit('password_recovered', {
+      userId: user._id,
+      email: user.email,
+      role: user.role,
+      question: user.securityQuestion
+    });
+
+    res.status(200).json({
+      message: 'Your password has been reset. You are signed in.',
+      token: generateToken(user._id, user.role),
+      user: authUserPayload(user)
+    });
+  } catch (error) {
+    console.error('Password recovery reset error:', error);
+
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// =====================================================
+// SET OR CHANGE THE RECOVERY QUESTION
+// =====================================================
+// For someone who is signed in and knows their password - which is everyone
+// except the account that lost it. The password check is what keeps a stolen
+// session token from planting an attacker's own question and then using it to
+// take the account over.
+export const setSecurityQuestion = async (req, res) => {
+  try {
+    const { securityQuestion, securityAnswer, currentPassword } = req.body;
+
+    if (!isSecurityQuestion(securityQuestion)) {
+      return res.status(400).json({
+        message: 'Please choose a security question'
+      });
+    }
+
+    const answerFailure = securityAnswerFailure(securityAnswer);
+
+    if (answerFailure) {
+      return res.status(400).json({ message: answerFailure });
+    }
+
+    if (typeof currentPassword !== 'string' || !currentPassword) {
+      return res.status(400).json({
+        message: 'Please confirm your current password'
+      });
+    }
+
+    const user = await User.findById(req.user.id).select(
+      '+password +securityAnswerHash'
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password
+    );
+
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        message: 'Current password is incorrect'
+      });
+    }
+
+    const answerSalt = await bcrypt.genSalt(10);
+
+    user.securityQuestion = securityQuestion;
+    user.securityAnswerHash = await bcrypt.hash(
+      normalizeSecurityAnswer(securityAnswer),
+      answerSalt
+    );
+
+    await user.save();
+
+    audit('security_question_updated', {
+      userId: user._id,
+      email: user.email,
+      role: user.role,
+      question: securityQuestion
+    });
+
+    // The question is reported back in the platform's own words so the
+    // settings card can show what is now stored. Nothing about the answer is
+    // ever returned, and the saved profile is fetched separately as usual.
+    res.status(200).json({
+      message: 'Recovery question saved.',
+      securityQuestion,
+      question: securityQuestionLabel(securityQuestion)
+    });
+  } catch (error) {
+    console.error('Security question error:', error);
 
     res.status(500).json({
       message: 'Server error',

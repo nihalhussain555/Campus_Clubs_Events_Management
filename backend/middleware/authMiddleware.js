@@ -1,6 +1,9 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-import { JWT_SECRET } from '../config/env.js';
+import {
+  JWT_SECRET,
+  PASSWORD_RECOVERY_TOKEN_TTL
+} from '../config/env.js';
 
 export const ROLES = {
   STUDENT: 'student',
@@ -24,6 +27,12 @@ export const normalizeRole = (role) => EFFECTIVE_ROLE[role] || ROLES.STUDENT;
 // has to choose its own password. It is signed with the same secret, so the
 // purpose claim is what keeps it from being replayed as a session token.
 export const PASSWORD_SETUP_PURPOSE = 'password_setup';
+
+// The two links issued by the forgot-password flow. The first one is handed to
+// whoever names a registered email, so it must stay tied to the single endpoint
+// that checks the answer; the second only exists once that answer matched.
+export const PASSWORD_ANSWER_PURPOSE = 'password_answer';
+export const PASSWORD_RESET_PURPOSE = 'password_reset';
 
 // Shared body for the "you must set a password first" rejection. 403 rather
 // than 401 on purpose: the frontend interceptor logs users out on 401, and
@@ -84,6 +93,14 @@ export const verifyToken = async (req, res, next) => {
         code: 'PASSWORD_SETUP_REQUIRED',
         message: 'Please complete your password setup first.'
       });
+    }
+
+    // A session token never carries a purpose claim. Rejecting every tagged
+    // token here matters most for recovery: the answer link is issued to an
+    // anonymous caller that only named an email address, so treating one as a
+    // session would hand that caller the account.
+    if (decoded.purpose) {
+      return res.status(401).json({ message: 'Invalid or expired token' });
     }
 
     // The role inside the JWT is never trusted; it would go stale the moment
@@ -198,6 +215,87 @@ export const verifyPasswordSetupToken = async (req, res, next) => {
     });
   }
 };
+
+// =====================================================
+// VERIFY PASSWORD RECOVERY LINKS
+// =====================================================
+// The forgot-password flow walks two purpose-tagged links, one per step: naming
+// a registered email buys the question, a matching answer buys the right to set
+// a new password. Neither unlocks anything else, and verifyToken rejects both.
+// The code is what tells the wizard to start the walk again, rather than
+// showing the reply as if the person had mistyped something.
+const RECOVERY_LINK_INVALID = 'RECOVERY_LINK_INVALID';
+
+const recoveryLinkInvalid = (res, message) =>
+  res.status(401).json({
+    code: RECOVERY_LINK_INVALID,
+    message
+  });
+
+const verifyRecoveryToken = (purpose) => async (req, res, next) => {
+  try {
+    const token = getTokenFromHeader(req);
+
+    if (!token) {
+      return recoveryLinkInvalid(res, 'Please start the recovery again.');
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    if (decoded.purpose !== purpose) {
+      return recoveryLinkInvalid(
+        res,
+        'This recovery link does not belong to this step. Please start again.'
+      );
+    }
+
+    const userId = decoded.id || decoded.userId;
+
+    if (!userId) {
+      return recoveryLinkInvalid(res, 'Invalid recovery link. Please start again.');
+    }
+
+    // Plus paths only, for the reason noted in verifyPasswordSetupToken: a
+    // plain field list beside them switches mongoose to inclusion mode.
+    const user = await User.findById(userId).select(
+      '+password +securityAnswerHash'
+    );
+
+    if (!user) {
+      return recoveryLinkInvalid(res, 'That account no longer exists.');
+    }
+
+    // Once the password has moved, the recovery run that asked for it is over -
+    // whether it finished here or through the change-password form. This reads
+    // passwordChangedAt for recovery links only; session tokens keep their
+    // existing behaviour.
+    if (isTokenRevoked(decoded, user)) {
+      return recoveryLinkInvalid(
+        res,
+        'This recovery link is no longer valid. Please start again.'
+      );
+    }
+
+    req.recoveryUser = user;
+
+    next();
+  } catch (error) {
+    console.error('Recovery authentication error:', error.message);
+
+    return recoveryLinkInvalid(
+      res,
+      'Invalid or expired recovery link. Please start again.'
+    );
+  }
+};
+
+export const verifyPasswordAnswerToken = verifyRecoveryToken(
+  PASSWORD_ANSWER_PURPOSE
+);
+
+export const verifyPasswordResetToken = verifyRecoveryToken(
+  PASSWORD_RESET_PURPOSE
+);
 
 // =====================================================
 // ROLE GATES

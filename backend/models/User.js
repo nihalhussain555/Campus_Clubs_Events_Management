@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { SECURITY_QUESTION_IDS } from '../utils/securityQuestions.js';
 
 const userSchema = new mongoose.Schema({
   name: {
@@ -128,6 +129,22 @@ const userSchema = new mongoose.Schema({
   // Set only while an admin-issued temporary password is outstanding. The
   // plaintext itself is never stored - only its bcrypt hash in `password`.
   temporaryPasswordExpiresAt: { type: Date, default: null },
+
+  // ---------------- Password recovery without email ----------------
+  // The question id always comes from utils/securityQuestions.js and the answer
+  // is stored only as a bcrypt hash of its normalised form, never in plain
+  // text. Neither field has a default: accounts that predate this feature have
+  // no question at all, and an enum path would reject an explicit null. They
+  // keep logging in normally and are asked to set a question from Account &
+  // Settings before they can recover a password here.
+  securityQuestion: {
+    type: String,
+    enum: SECURITY_QUESTION_IDS
+  },
+  securityAnswerHash: {
+    type: String,
+    select: false
+  },
 
   createdAt: {
     type: Date,

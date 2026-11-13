@@ -1,6 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Lock, Mail, User } from 'lucide-react';
+import {
+  GraduationCap,
+  HelpCircle,
+  Lock,
+  Mail,
+  ShieldCheck,
+  User
+} from 'lucide-react';
 import { authAPI } from '../services/api';
 import {
   PASSWORD_REQUIREMENT_TEXT,
@@ -8,6 +15,9 @@ import {
 } from '../utils/passwordPolicy';
 import PasswordRules from '../components/PasswordRules';
 import Toast from '../components/Toast';
+
+// The answer is only ever sent for hashing, never shown back or stored here.
+const SECURITY_ANSWER_MIN_LENGTH = 3;
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -17,13 +27,36 @@ const Register = () => {
     confirmPassword: '',
     role: 'student',
     gender: '',
+    securityQuestion: '',
+    securityAnswer: '',
   });
+
+  const [questions, setQuestions] = useState([]);
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showToast, setShowToast] = useState(false);
 
   const navigate = useNavigate();
+
+  // The catalogue lives on the server so the list cannot be widened from the
+  // browser. It is fetched before anyone has credentials.
+  useEffect(() => {
+    let cancelled = false;
+
+    authAPI
+      .getSecurityQuestions()
+      .then(({ data }) => {
+        if (!cancelled) setQuestions(data.questions || []);
+      })
+      .catch(() => {
+        if (!cancelled) setQuestions([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -67,6 +100,14 @@ const Register = () => {
       return 'Please select your gender';
     }
 
+    if (!formData.securityQuestion) {
+      return 'Please choose a recovery question';
+    }
+
+    if (formData.securityAnswer.trim().length < SECURITY_ANSWER_MIN_LENGTH) {
+      return `Your recovery answer must be at least ${SECURITY_ANSWER_MIN_LENGTH} characters`;
+    }
+
     return '';
   };
 
@@ -88,6 +129,8 @@ const Register = () => {
         password: formData.password,
         role: formData.role,
         gender: formData.gender,
+        securityQuestion: formData.securityQuestion,
+        securityAnswer: formData.securityAnswer.trim(),
       });
 
       const { token, user } = response.data;
@@ -304,6 +347,79 @@ const Register = () => {
               />
             </div>
 
+
+            {/* RECOVERY QUESTION */}
+            <div>
+              <label
+                htmlFor="securityQuestion"
+                className="field-label flex items-center gap-2"
+              >
+                <HelpCircle size={17} />
+                Recovery question *
+              </label>
+
+              <select
+                id="securityQuestion"
+                name="securityQuestion"
+                value={formData.securityQuestion}
+                onChange={handleChange}
+                className="field bg-white"
+                required
+              >
+                <option value="">
+                  Select a question
+                </option>
+
+                {questions.map((question) => (
+                  <option
+                    key={question.id}
+                    value={question.id}
+                  >
+                    {question.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+
+            {/* RECOVERY ANSWER */}
+            <div>
+              <label
+                htmlFor="securityAnswer"
+                className="field-label flex items-center gap-2"
+              >
+                <ShieldCheck size={17} />
+                Your answer *
+              </label>
+
+              <input
+                id="securityAnswer"
+                name="securityAnswer"
+                value={formData.securityAnswer}
+                onChange={handleChange}
+                className="field"
+                placeholder="Only you would know this"
+                autoComplete="off"
+                required
+              />
+            </div>
+
+          </div>
+
+
+          {/* WHY THIS IS ASKED */}
+          <div className="blue-panel flex items-start gap-3">
+            <ShieldCheck
+              size={18}
+              className="mt-0.5 shrink-0 text-[#145f82]"
+            />
+
+            <p className="text-xs leading-5 text-[#145f82]">
+              This question is how you get back in if you forget your password.
+              There is no email link and no one-time code. Pick one whose answer
+              you will still know in three years - only an encrypted copy of the
+              answer is stored, never the answer itself.
+            </p>
           </div>
 
 

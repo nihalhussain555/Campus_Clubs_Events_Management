@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   authAPI,
   certificateAPI,
@@ -31,6 +32,7 @@ import {
   Lock,
   User,
   ShieldCheck,
+  HelpCircle,
   Bell,
   Camera,Mail,Phone,MapPin,CalendarDays,GraduationCap,Building2,Hash,CheckCircle2,Smartphone,BellRing,Megaphone,RotateCcw,
   Sun,
@@ -77,6 +79,9 @@ const isEmpty = (value) =>
   value === null ||
   String(value).trim() === '';
 
+// Mirrors the guard the backend applies before hashing a recovery answer.
+const SECURITY_ANSWER_MIN_LENGTH = 3;
+
 // Check-in and verification tokens are capabilities, not personal data: anyone
 // holding one can act for the student, so they never go into a downloadable file.
 const SENSITIVE_KEY = /token|password|secret/i;
@@ -100,6 +105,8 @@ const scrub = (value) => {
 };
 
 const AccountSettings = () => {
+  const navigate = useNavigate();
+
   const [initialUser, setInitialUser] = useState(null);
   const [user, setUser] = useState({});
   const [loading, setLoading] = useState(true);
@@ -115,6 +122,14 @@ const AccountSettings = () => {
   const [showPwd, setShowPwd] = useState(false);
   const [pwdLoading, setPwdLoading] = useState(false);
 
+  // Recovery question
+  const [questions, setQuestions] = useState([]);
+  const [secQuestion, setSecQuestion] = useState('');
+  const [secAnswer, setSecAnswer] = useState('');
+  const [secPwd, setSecPwd] = useState('');
+  const [showSecPwd, setShowSecPwd] = useState(false);
+  const [secLoading, setSecLoading] = useState(false);
+
   const { theme, mode, setThemeMode } = useTheme();
 
   useEffect(() => {
@@ -124,6 +139,7 @@ const AccountSettings = () => {
 
         setInitialUser(data.user);
         setUser(data.user);
+        setSecQuestion(data.user?.securityQuestion || '');
       } catch (err) {
         setToast({
           message: 'Failed to load profile',
@@ -135,6 +151,32 @@ const AccountSettings = () => {
     };
 
     fetchProfile();
+  }, []);
+
+  // The catalogue is fixed on the server, so this page can only offer the
+  // questions the backend is willing to accept.
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchQuestions = async () => {
+      try {
+        const { data } = await authAPI.getSecurityQuestions();
+
+        if (!cancelled) {
+          setQuestions(data.questions || []);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setQuestions([]);
+        }
+      }
+    };
+
+    fetchQuestions();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleReset = () => {
@@ -246,6 +288,74 @@ const AccountSettings = () => {
       });
     } finally {
       setPwdLoading(false);
+    }
+  };
+
+  const handleSaveSecurityQuestion = async () => {
+    if (!secQuestion) {
+      setToast({
+        message: 'Please choose a recovery question first.',
+        type: 'error'
+      });
+
+      return;
+    }
+
+    if (secAnswer.trim().length < SECURITY_ANSWER_MIN_LENGTH) {
+      setToast({
+        message: `The answer needs at least ${SECURITY_ANSWER_MIN_LENGTH} characters.`,
+        type: 'error'
+      });
+
+      return;
+    }
+
+    if (!secPwd) {
+      setToast({
+        message: 'Confirm your current password to save a recovery question.',
+        type: 'error'
+      });
+
+      return;
+    }
+
+    setSecLoading(true);
+
+    try {
+      const { data } = await authAPI.setSecurityQuestion({
+        securityQuestion: secQuestion,
+        securityAnswer: secAnswer.trim(),
+        currentPassword: secPwd
+      });
+
+      // The answer itself never comes back and is not kept in state; only the
+      // question identifier is a profile field.
+      setUser((prev) => ({
+        ...prev,
+        securityQuestion: data.securityQuestion
+      }));
+
+      setInitialUser((prev) => ({
+        ...(prev || {}),
+        securityQuestion: data.securityQuestion
+      }));
+
+      setSecAnswer('');
+      setSecPwd('');
+
+      setToast({
+        message: data.message || 'Recovery question saved',
+        type: 'success'
+      });
+    } catch (err) {
+      setToast({
+        message:
+          err.response?.data?.message ||
+          'We could not save your recovery question',
+        type: 'error'
+      });
+    } finally {
+      setSecLoading(false);
     }
   };
 
@@ -421,6 +531,16 @@ const AccountSettings = () => {
   const strength = passwordStrength(newPwd);
 
   const passwordMismatch = Boolean(confirmPwd) && confirmPwd !== newPwd;
+
+  // The stored question id is shown as its full text once the catalogue loads;
+  // the id is the fallback so the status line is never blank.
+  const storedQuestion = user?.securityQuestion || '';
+
+  const storedQuestionLabel =
+    questions.find((item) => item.id === storedQuestion)?.label ||
+    storedQuestion;
+
+  const hasRecoveryQuestion = Boolean(storedQuestion);
 
   if (loading) {
     return (
@@ -1219,6 +1339,155 @@ const AccountSettings = () => {
                   ? 'Updating...'
                   : 'Update Password'}
               </button>
+            </div>
+
+            {/* =====================================================
+                RECOVERY QUESTION
+            ===================================================== */}
+            <div className="mt-8 border-t border-slate-200 pt-6">
+
+              <div className="flex items-start gap-3">
+                <div className="settings-tile">
+                  <HelpCircle size={18} />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800">
+                    Recovery question
+                  </h3>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    This is how you prove who you are on the
+                    {' '}
+                    <button
+                      type="button"
+                      onClick={() => navigate('/forgot-password')}
+                      className="font-semibold text-[#145f82] hover:text-black"
+                    >
+                      Forgot password
+                    </button>
+                    {' '}
+                    page. No email link and no code are sent; only an encrypted
+                    copy of your answer is stored.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-5">
+
+                {/* QUESTION */}
+                <div>
+                  <label className="settings-label" htmlFor="recovery-question">
+                    Question
+                  </label>
+
+                  <select
+                    id="recovery-question"
+                    value={secQuestion}
+                    onChange={(e) => setSecQuestion(e.target.value)}
+                    className="settings-input w-full bg-white"
+                  >
+                    <option value="">
+                      {questions.length
+                        ? 'Choose a question'
+                        : 'Questions unavailable'}
+                    </option>
+
+                    {questions.map(({ id, label }) => (
+                      <option key={id} value={id}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* ANSWER */}
+                <div>
+                  <label className="settings-label" htmlFor="recovery-answer">
+                    Your answer
+                  </label>
+
+                  <input
+                    id="recovery-answer"
+                    type="text"
+                    value={secAnswer}
+                    onChange={(e) => setSecAnswer(e.target.value)}
+                    className="settings-input w-full"
+                    placeholder="Answer only you would know"
+                    autoComplete="off"
+                  />
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    Capital letters and extra spaces are ignored.
+                  </p>
+                </div>
+
+                {/* CURRENT PASSWORD */}
+                <div>
+                  <label className="settings-label" htmlFor="recovery-password">
+                    Confirm current password
+                  </label>
+
+                  <div className="password-wrapper">
+                    <Lock size={17} />
+
+                    <input
+                      id="recovery-password"
+                      type={showSecPwd ? 'text' : 'password'}
+                      value={secPwd}
+                      onChange={(e) => setSecPwd(e.target.value)}
+                      className="settings-input"
+                      placeholder="Current password"
+                      autoComplete="current-password"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowSecPwd(!showSecPwd)}
+                      className="password-toggle"
+                      aria-label={showSecPwd ? 'Hide password' : 'Show password'}
+                    >
+                      {showSecPwd ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p
+                  className={
+                    hasRecoveryQuestion
+                      ? 'text-xs font-semibold text-green-600'
+                      : 'text-xs font-semibold text-amber-600'
+                  }
+                >
+                  {hasRecoveryQuestion
+                    ? `Recovery is switched on. You will be asked: ${storedQuestionLabel}`
+                    : 'No question saved yet, so a forgotten password can only be reset by an administrator.'}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleSaveSecurityQuestion}
+                  disabled={secLoading}
+                  className="btn-primary"
+                >
+                  {secLoading ? (
+                    <RefreshCw
+                      size={16}
+                      className="animate-spin"
+                    />
+                  ) : (
+                    <Save size={16} />
+                  )}
+
+                  {secLoading
+                    ? 'Saving...'
+                    : hasRecoveryQuestion
+                      ? 'Update Recovery Question'
+                      : 'Save Recovery Question'}
+                </button>
+              </div>
             </div>
           </div>
         </section>

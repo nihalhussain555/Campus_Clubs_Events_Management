@@ -54,6 +54,13 @@ export const TEMP_PASSWORD_TTL_HOURS = Math.min(
 export const PASSWORD_SETUP_TOKEN_TTL =
   process.env.PASSWORD_SETUP_TOKEN_TTL || '15m';
 
+// The two links handed out by the forgot-password flow (answer the question,
+// then set a new password) each live for one sitting only. Separate from the
+// setup token so a deployment can shorten recovery without touching the
+// mandatory first-login path.
+export const PASSWORD_RECOVERY_TOKEN_TTL =
+  process.env.PASSWORD_RECOVERY_TOKEN_TTL || '15m';
+
 export const assertProductionConfig = () => {
   if (!isProduction) return;
 

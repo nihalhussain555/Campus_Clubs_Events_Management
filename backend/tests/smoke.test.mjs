@@ -71,9 +71,22 @@ const call = async (method, path, { token, body } = {}) => {
 // Declared before the fixtures so makeUser can log in with it.
 const SELF_SERVICE_PW = 'Secret123!';
 
+// Signup asks every new account for a recovery question, so the fixtures all
+// answer the same one. The text is only ever stored as a hash; the recovery
+// tests read these constants to prove it.
+const FIXTURE_QUESTION = 'first_pet';
+const FIXTURE_ANSWER = 'Biscuit';
+
 const makeUser = async (name, email, role) => {
   const signup = await call('POST', '/auth/signup', {
-    body: { name, email, password: SELF_SERVICE_PW, department: 'CSE' },
+    body: {
+      name,
+      email,
+      password: SELF_SERVICE_PW,
+      department: 'CSE',
+      securityQuestion: FIXTURE_QUESTION,
+      securityAnswer: FIXTURE_ANSWER
+    },
   });
   assert.equal(signup.status, 201, `signup failed for ${email}`);
 
@@ -104,6 +117,12 @@ const test = async (name, fn) => {
 
 const future = (hours) => new Date(Date.now() + hours * 3600000).toISOString();
 const past = (hours) => new Date(Date.now() - hours * 3600000).toISOString();
+
+// Token iat and passwordChangedAt are both second-aligned, so a recovery link
+// spent inside the second it was minted stays valid by design. Resting a full
+// second before the password moves makes "that link is now dead" a fact rather
+// than a race the suite happens to win.
+const restASecond = () => new Promise((resolve) => setTimeout(resolve, 1050));
 
 console.log('\nCampus Clubs - backend integration tests\n');
 
@@ -3711,6 +3730,464 @@ await test('external events never touch the internal event machine', async () =>
   // The reminder sweep is a Event collection job, so a 30-minute notice can only
   // ever fire for something on the campus schedule.
   assert.equal(await Event.countDocuments({ reminderSentAt: null, date: external.data.event.date }), 0);
+});
+
+// ---------------------------------------------------------------- password recovery
+
+// One narrative, in the order the guards allow it: the shared 127.0.0.1 source
+// address is what the recovery limiters key on, so this section is the only one
+// that touches those endpoints and its guesses are counted across the tests.
+const bcrypt = (await import('bcryptjs')).default;
+const {
+  SECURITY_QUESTIONS,
+  SECURITY_QUESTION_IDS,
+  securityQuestionLabel
+} = await import('../utils/securityQuestions.js');
+
+const REC = '/auth/forgot-password';
+const NEW_PW = 'Recovered#2026';
+const OTHER_ANSWER = 'Monsoon';
+
+// The account the whole section recovers.
+const recUser = await makeUser('Rea Recover', 'recover@test.dev');
+
+// An account written the way the database already holds them: no question, no
+// answer hash. It must keep logging in, and must not be recoverable here.
+const legacySalt = await bcrypt.genSalt(10);
+const legacy = await User.create({
+  name: 'Legacy Recover',
+  email: 'legacyrec@test.dev',
+  password: await bcrypt.hash(SELF_SERVICE_PW, legacySalt),
+  department: 'CSE'
+});
+
+// The links and the session the wizard would be holding, carried from one test
+// to the next in the order a real person would meet them.
+const recState = {};
+
+await test('the question catalogue is public and fixed', async () => {
+  const response = await call('GET', '/auth/security-questions');
+
+  assert.equal(response.status, 200, response.data?.message);
+  assert.ok(Array.isArray(response.data.questions), 'questions is not a list');
+  assert.ok(response.data.questions.length >= 5, 'catalogue is too small');
+
+  const ids = response.data.questions.map((question) => question.id);
+
+  assert.equal(
+    new Set(ids).size,
+    ids.length,
+    'two questions share an id'
+  );
+  assert.ok(
+    ids.every((id) => SECURITY_QUESTION_IDS.includes(id)),
+    'a question is not in the server catalogue'
+  );
+  assert.ok(
+    response.data.questions.every(
+      (question) =>
+        typeof question.label === 'string' && question.label.endsWith('?')
+    ),
+    'every question needs a label to show the user'
+  );
+});
+
+await test('signup requires a recovery question and a usable answer', async () => {
+  const baseBody = {
+    name: 'Question Needed',
+    email: 'questionneeded@test.dev',
+    password: SELF_SERVICE_PW
+  };
+
+  const noQuestion = await call('POST', '/auth/signup', { body: baseBody });
+
+  assert.equal(noQuestion.status, 400, 'a signup without a question passed');
+  assert.match(
+    noQuestion.data.message,
+    /security question/i,
+    noQuestion.data.message
+  );
+
+  const invented = await call('POST', '/auth/signup', {
+    body: { ...baseBody, securityQuestion: 'my_password', securityAnswer: 'X' }
+  });
+
+  assert.equal(invented.status, 400, 'an invented question was accepted');
+
+  const shortAnswer = await call('POST', '/auth/signup', {
+    body: { ...baseBody, securityQuestion: 'first_pet', securityAnswer: '  b ' }
+  });
+
+  assert.equal(shortAnswer.status, 400, 'a one-character answer was accepted');
+
+  const good = await call('POST', '/auth/signup', {
+    body: {
+      ...baseBody,
+      securityQuestion: 'first_pet',
+      securityAnswer: 'Biscuit'
+    }
+  });
+
+  assert.equal(good.status, 201, good.data?.message);
+
+  const stored = await User.findById(good.data.user.id).select(
+    '+securityAnswerHash'
+  );
+
+  assert.equal(stored.securityQuestion, 'first_pet', 'question not stored');
+  assert.ok(stored.securityAnswerHash, 'answer hash not stored');
+  assert.ok(
+    !/biscuit/i.test(JSON.stringify(stored.toObject())),
+    'the answer is stored in plain text'
+  );
+  assert.ok(
+    await bcrypt.compare('biscuit', stored.securityAnswerHash),
+    'the stored hash does not match the normalised answer'
+  );
+});
+
+await test('naming an account returns the question it chose', async () => {
+  const response = await call('POST', `${REC}/question`, {
+    body: { email: recUser.email }
+  });
+
+  assert.equal(response.status, 200, response.data?.message);
+  assert.equal(
+    response.data.question,
+    securityQuestionLabel(FIXTURE_QUESTION),
+    'the wrong question came back'
+  );
+  assert.ok(response.data.answerToken, 'no answer token was issued');
+  assert.ok(
+    !JSON.stringify(response.data).includes('$2'),
+    'a hash leaked from the recovery step'
+  );
+
+  recState.answerToken = response.data.answerToken;
+});
+
+await test('a question-less account cannot be recovered, and says so quietly', async () => {
+  const unknown = await call('POST', `${REC}/question`, {
+    body: { email: 'nobody-at-all@test.dev' }
+  });
+
+  const questionless = await call('POST', `${REC}/question`, {
+    body: { email: legacy.email }
+  });
+
+  assert.equal(unknown.status, 404, 'an unknown email did not 404');
+  assert.equal(questionless.status, 404, 'a question-less account was opened');
+  assert.equal(
+    unknown.data.message,
+    questionless.data.message,
+    'the two replies tell an attacker which emails exist'
+  );
+
+  const stillWorks = await call('POST', '/auth/login', {
+    body: { email: legacy.email, password: SELF_SERVICE_PW }
+  });
+
+  assert.equal(
+    stillWorks.status,
+    200,
+    'an account with no question can no longer log in'
+  );
+});
+
+await test('the answer is checked case and whitespace independently', async () => {
+  const wrong = await call('POST', `${REC}/verify`, {
+    token: recState.answerToken,
+    body: { answer: 'Rex' }
+  });
+
+  assert.equal(wrong.status, 401, 'a wrong answer was accepted');
+  assert.ok(
+    !wrong.data.resetToken,
+    'a reset token came back with a wrong answer'
+  );
+
+  const sloppy = await call('POST', `${REC}/verify`, {
+    token: recState.answerToken,
+    body: { answer: `  ${String(FIXTURE_ANSWER).toUpperCase()}  ` }
+  });
+
+  assert.equal(sloppy.status, 200, sloppy.data?.message);
+  assert.ok(sloppy.data.resetToken, 'the right answer issued no reset token');
+
+  recState.resetToken = sloppy.data.resetToken;
+});
+
+await test('each recovery link unlocks exactly its own step', async () => {
+  const sessionOnVerify = await call('POST', `${REC}/verify`, {
+    token: recUser.token,
+    body: { answer: FIXTURE_ANSWER }
+  });
+
+  assert.equal(
+    sessionOnVerify.status,
+    401,
+    'a session token was accepted by the answer step'
+  );
+
+  const answerOnReset = await call('POST', `${REC}/reset`, {
+    token: recState.answerToken,
+    body: { newPassword: NEW_PW, confirmPassword: NEW_PW }
+  });
+
+  assert.equal(
+    answerOnReset.status,
+    401,
+    'the answer token reached the reset step'
+  );
+
+  const answerAsSession = await call('GET', '/auth/profile', {
+    token: recState.answerToken
+  });
+
+  assert.equal(
+    answerAsSession.status,
+    401,
+    'a recovery token works as a session token'
+  );
+
+  const noToken = await call('POST', `${REC}/reset`, {
+    body: { newPassword: NEW_PW, confirmPassword: NEW_PW }
+  });
+
+  assert.equal(noToken.status, 401, 'the reset step ran with no link at all');
+});
+
+await test('recovery writes a new password and signs the account in', async () => {
+  const before = await User.findById(recUser.id).select('+password');
+
+  const reuse = await call('POST', `${REC}/reset`, {
+    token: recState.resetToken,
+    body: {
+      newPassword: SELF_SERVICE_PW,
+      confirmPassword: SELF_SERVICE_PW
+    }
+  });
+
+  assert.equal(
+    reuse.status,
+    400,
+    'the forgotten password could simply be given back'
+  );
+
+  const weak = await call('POST', `${REC}/reset`, {
+    token: recState.resetToken,
+    body: { newPassword: 'short', confirmPassword: 'short' }
+  });
+
+  assert.equal(weak.status, 400, 'a weak password passed the policy');
+
+  const mismatch = await call('POST', `${REC}/reset`, {
+    token: recState.resetToken,
+    body: { newPassword: NEW_PW, confirmPassword: `${NEW_PW}x` }
+  });
+
+  assert.equal(
+    mismatch.status,
+    400,
+    'the confirmation was not compared'
+  );
+
+  await restASecond();
+
+  const reset = await call('POST', `${REC}/reset`, {
+    token: recState.resetToken,
+    body: { newPassword: NEW_PW, confirmPassword: NEW_PW }
+  });
+
+  assert.equal(reset.status, 200, reset.data?.message);
+  assert.ok(reset.data.token, 'no session token after a reset');
+  assert.ok(!/\$2[aby]\$\d{2}\$/.test(JSON.stringify(reset.data)), 'a hash leaked');
+
+  const after = await User.findById(recUser.id).select('+password');
+
+  assert.notEqual(after.password, before.password, 'the password was not written');
+  assert.ok(
+    await bcrypt.compare(NEW_PW, after.password),
+    'the stored hash is not the new password'
+  );
+
+  const oldLogin = await call('POST', '/auth/login', {
+    body: { email: recUser.email, password: SELF_SERVICE_PW }
+  });
+
+  assert.equal(oldLogin.status, 401, 'the old password still logs in');
+
+  const newLogin = await call('POST', '/auth/login', {
+    body: { email: recUser.email, password: NEW_PW }
+  });
+
+  assert.equal(newLogin.status, 200, newLogin.data?.message);
+
+  const profile = await call('GET', '/auth/profile', {
+    token: reset.data.token
+  });
+
+  assert.equal(
+    profile.status,
+    200,
+    'the token from the reset is not a working session'
+  );
+
+  // The session the remaining tests sign in with: changing a password ends the
+  // tokens issued before it, so recUser.token is retired by the reset above.
+  recState.sessionToken = newLogin.data.token;
+
+  const answerHash = (
+    await User.findById(recUser.id).select('+securityAnswerHash')
+  ).securityAnswerHash;
+
+  assert.ok(answerHash, 'the answer hash disappeared with the old password');
+  assert.ok(
+    !JSON.stringify(profile.data).includes(answerHash),
+    'the answer hash was returned by the profile endpoint'
+  );
+  assert.ok(
+    !JSON.stringify(reset.data).includes(answerHash),
+    'the answer hash was returned by the reset endpoint'
+  );
+});
+
+await test('recovery links die as soon as the password moves', async () => {
+  const staleAnswer = await call('POST', `${REC}/verify`, {
+    token: recState.answerToken,
+    body: { answer: FIXTURE_ANSWER }
+  });
+
+  assert.equal(
+    staleAnswer.status,
+    401,
+    'a link survived the password it was issued for'
+  );
+
+  const staleReset = await call('POST', `${REC}/reset`, {
+    token: recState.resetToken,
+    body: { newPassword: 'Another#2026', confirmPassword: 'Another#2026' }
+  });
+
+  assert.equal(staleReset.status, 401, 'a reset link survived its own reset');
+});
+
+await test('changing the question needs the password, then the new answer rules', async () => {
+  const questionBody = {
+    securityQuestion: 'first_school',
+    securityAnswer: OTHER_ANSWER
+  };
+
+  const noPassword = await call('PUT', '/auth/security-question', {
+    token: recState.sessionToken,
+    body: questionBody
+  });
+
+  assert.equal(
+    noPassword.status,
+    400,
+    'a question was saved without confirming the password'
+  );
+
+  const wrongPassword = await call('PUT', '/auth/security-question', {
+    token: recState.sessionToken,
+    body: { ...questionBody, currentPassword: 'NotMyPassword#1' }
+  });
+
+  assert.equal(
+    wrongPassword.status,
+    401,
+    'an incorrect password still saved the question'
+  );
+
+  const invented = await call('PUT', '/auth/security-question', {
+    token: recState.sessionToken,
+    body: {
+      securityQuestion: 'my_dog',
+      securityAnswer: OTHER_ANSWER,
+      currentPassword: NEW_PW
+    }
+  });
+
+  assert.equal(
+    invented.status,
+    400,
+    'a question outside the catalogue was saved'
+  );
+
+  const saved = await call('PUT', '/auth/security-question', {
+    token: recState.sessionToken,
+    body: { ...questionBody, currentPassword: NEW_PW }
+  });
+
+  assert.equal(saved.status, 200, saved.data?.message);
+  assert.equal(saved.data.securityQuestion, 'first_school', 'wrong id back');
+  assert.equal(
+    saved.data.question,
+    securityQuestionLabel('first_school'),
+    'wrong label back'
+  );
+
+  const shown = await call('POST', `${REC}/question`, {
+    body: { email: recUser.email }
+  });
+
+  assert.equal(shown.status, 200, shown.data?.message);
+  assert.equal(
+    shown.data.question,
+    SECURITY_QUESTIONS.find((q) => q.id === 'first_school').label,
+    'step 1 still shows the old question'
+  );
+
+  const profile = await call('GET', '/auth/profile', {
+    token: recState.sessionToken
+  });
+
+  assert.equal(
+    profile.data.user.securityQuestion,
+    'first_school',
+    'the profile does not report the stored question'
+  );
+  assert.ok(
+    !('securityAnswerHash' in profile.data.user),
+    'the profile carries an answer hash'
+  );
+
+  const verified = await call('POST', `${REC}/verify`, {
+    token: shown.data.answerToken,
+    body: { answer: OTHER_ANSWER }
+  });
+
+  assert.equal(
+    verified.status,
+    200,
+    'the new answer was refused: ' + verified.data?.message
+  );
+
+  const stored = await User.findById(recUser.id).select('+securityAnswerHash');
+
+  assert.ok(
+    !(await bcrypt.compare(FIXTURE_ANSWER, stored.securityAnswerHash)),
+    'the replaced answer still verifies'
+  );
+});
+
+await test('the answer step is rate limited per address', async () => {
+  const started = await call('POST', `${REC}/question`, {
+    body: { email: recUser.email }
+  });
+
+  assert.equal(started.status, 200, started.data?.message);
+
+  // Five guesses is the whole window budget, and this section has now spent it:
+  // successes count too, so the next request is refused whoever it comes from.
+  const blocked = await call('POST', `${REC}/verify`, {
+    token: started.data.answerToken,
+    body: { answer: 'Whatever It Is' }
+  });
+
+  assert.equal(blocked.status, 429, 'the answer step let a sixth guess through');
+  assert.match(blocked.data.message, /too many answer attempts/i, blocked.data.message);
 });
 
 // ---------------------------------------------------------------- summary

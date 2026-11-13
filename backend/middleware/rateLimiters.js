@@ -32,6 +32,33 @@ export const passwordSetupLimiter = rateLimit({
   },
 });
 
+// Password recovery runs without email or OTP, so its two open steps need
+// their own budgets. Naming a registered email only reveals a question the
+// account already chose in public words, but it is reachable anonymously, so
+// it is capped. Checking the answer is the single guessable step in the flow
+// and the tightest limit lives there; unlike the setup endpoint, a correct
+// answer also counts against it, because a guesser who is right is done.
+export const recoveryStartLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: {
+    message: 'Too many recovery attempts. Please try again later.',
+  },
+});
+
+export const recoveryAnswerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: {
+    message:
+      'Too many answer attempts. Please try again in a few minutes or ask an administrator to reset your password.',
+  },
+});
+
 // Groq calls spend real quota.
 export const agentLimiter = rateLimit({
   windowMs: 60 * 1000,

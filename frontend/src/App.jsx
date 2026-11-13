@@ -12,6 +12,7 @@ const Contact = lazy(() => import('./pages/Contact'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const SetNewPassword = lazy(() => import('./pages/SetNewPassword'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate'));
 const Clubs = lazy(() => import('./pages/Clubs'));
 const Events = lazy(() => import('./pages/Events'));
@@ -62,6 +63,10 @@ function App() {
               it needs the restricted setup token and redirects to login
               without one. */}
           <Route path="/set-new-password" element={<SetNewPassword />} />
+
+          {/* Password recovery by security question. Public, and it never
+              needs a session - only the link each step earned. */}
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route
             path="/verify-certificate/:qrToken"
             element={<VerifyCertificate />}

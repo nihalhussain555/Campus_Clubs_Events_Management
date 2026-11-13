@@ -9,18 +9,27 @@ import {
   getAllUsers,
   completePasswordSetup,
   createUserByAdmin,
-  regenerateTemporaryPassword
+  regenerateTemporaryPassword,
+  getSecurityQuestions,
+  requestRecoveryQuestion,
+  verifyRecoveryAnswer,
+  resetPasswordWithRecovery,
+  setSecurityQuestion
 } from '../controllers/authController.js';
 
 import {
   verifyToken,
   verifyAdmin,
-  verifyPasswordSetupToken
+  verifyPasswordSetupToken,
+  verifyPasswordAnswerToken,
+  verifyPasswordResetToken
 } from '../middleware/authMiddleware.js';
 
 import {
   loginLimiter,
-  passwordSetupLimiter
+  passwordSetupLimiter,
+  recoveryStartLimiter,
+  recoveryAnswerLimiter
 } from '../middleware/rateLimiters.js';
 
 const router = express.Router();
@@ -55,6 +64,39 @@ router.post(
 
 
 // =====================================================
+// PASSWORD RECOVERY (no email, no OTP)
+// =====================================================
+
+// The fixed catalogue of questions, needed by the register form.
+router.get(
+  '/security-questions',
+  getSecurityQuestions
+);
+
+// Three steps, one request each, and each step runs on the link the previous
+// step issued. The reset step needs no limiter of its own: its link only ever
+// exists once the answer already matched.
+router.post(
+  '/forgot-password/question',
+  recoveryStartLimiter,
+  requestRecoveryQuestion
+);
+
+router.post(
+  '/forgot-password/verify',
+  recoveryAnswerLimiter,
+  verifyPasswordAnswerToken,
+  verifyRecoveryAnswer
+);
+
+router.post(
+  '/forgot-password/reset',
+  verifyPasswordResetToken,
+  resetPasswordWithRecovery
+);
+
+
+// =====================================================
 // USER PROFILE ROUTES
 // =====================================================
 
@@ -82,6 +124,14 @@ router.put(
   '/change-password',
   verifyToken,
   changePassword
+);
+
+// Choose or replace the recovery question. Needs the current password, so a
+// stolen session cannot plant an attacker's own question.
+router.put(
+  '/security-question',
+  verifyToken,
+  setSecurityQuestion
 );
 
 

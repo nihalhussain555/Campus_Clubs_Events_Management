@@ -17,8 +17,27 @@ const api = axios.create({
 const SETUP_TOKEN_KEY = 'passwordSetupToken';
 const SETUP_ACCOUNT_KEY = 'passwordSetupAccount';
 
+// Password recovery is a three-step walk, and the two links it collects are no
+// more sessions than the setup token is. They live in their own keys so the
+// request below can present exactly the one the endpoint expects, and so
+// starting a recovery while signed in cannot overwrite the real session.
+const ANSWER_TOKEN_KEY = 'passwordAnswerToken';
+const RESET_TOKEN_KEY = 'passwordResetToken';
+const RECOVERY_ACCOUNT_KEY = 'passwordRecoveryAccount';
+
 const isPasswordSetupRequest = (url = '') =>
   url.includes('/auth/complete-password-setup');
+
+const isRecoveryRequest = (url = '') =>
+  url.includes('/auth/forgot-password');
+
+const tokenKeyForUrl = (url = '') => {
+  if (isPasswordSetupRequest(url)) return SETUP_TOKEN_KEY;
+  if (url.includes('/auth/forgot-password/verify')) return ANSWER_TOKEN_KEY;
+  if (url.includes('/auth/forgot-password/reset')) return RESET_TOKEN_KEY;
+
+  return 'token';
+};
 
 // =====================================================
 // ADD TOKEN TO REQUESTS
@@ -29,9 +48,7 @@ api.interceptors.request.use(
     // While mandatory password setup is in progress there is no session token
     // at all - only the restricted setup token, which the backend accepts on
     // this one endpoint and refuses everywhere else.
-    const token = localStorage.getItem(
-      isPasswordSetupRequest(config.url) ? SETUP_TOKEN_KEY : 'token'
-    );
+    const token = localStorage.getItem(tokenKeyForUrl(config.url));
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -64,12 +81,18 @@ api.interceptors.response.use(
     // explained next to the form, not answered with a silent redirect.
     const isSetupRequest = isPasswordSetupRequest(requestUrl);
 
+    // Same for the recovery wizard. It is a public page with no session to
+    // protect, and bouncing it to /login would throw away the step the user is
+    // on every time they mistype an answer.
+    const isRecovery = isRecoveryRequest(requestUrl);
+
     // Only redirect for protected requests
     if (
       status === 401 &&
       !isLoginRequest &&
       !isAgentRequest &&
-      !isSetupRequest
+      !isSetupRequest &&
+      !isRecovery
     ) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -172,6 +195,27 @@ export const authAPI = {
   completePasswordSetup: (data) =>
     api.post('/auth/complete-password-setup', data),
 
+  // The fixed list of recovery questions, available before anyone signs up.
+  getSecurityQuestions: () =>
+    api.get('/auth/security-questions'),
+
+  // Recovery step 1: name the account and receive its question. The reply
+  // carries the link step 2 runs on, which the interceptor then attaches.
+  requestRecoveryQuestion: (data) =>
+    api.post('/auth/forgot-password/question', data),
+
+  // Recovery step 2: answer it, and receive the link step 3 runs on.
+  verifyRecoveryAnswer: (data) =>
+    api.post('/auth/forgot-password/verify', data),
+
+  // Recovery step 3: set the new password. A successful reply is a session.
+  resetRecoveredPassword: (data) =>
+    api.post('/auth/forgot-password/reset', data),
+
+  // Signed in, and knowing the password: choose or replace the question.
+  setSecurityQuestion: (data) =>
+    api.put('/auth/security-question', data),
+
   // Admin: open an account and receive its one-time temporary password.
   createUser: (data) =>
     api.post('/auth/users', data),
@@ -209,6 +253,52 @@ export const hasPasswordSetupSession = () =>
 export const clearPasswordSetupSession = () => {
   localStorage.removeItem(SETUP_TOKEN_KEY);
   localStorage.removeItem(SETUP_ACCOUNT_KEY);
+};
+
+
+// =====================================================
+// PASSWORD RECOVERY SESSION HELPERS
+// =====================================================
+
+// A refresh in the middle of a recovery should not restart it, so the link each
+// step earned is kept under its own key and read back by the wizard.
+export const savePasswordAnswerToken = (token) => {
+  localStorage.setItem(ANSWER_TOKEN_KEY, token);
+};
+
+export const savePasswordResetToken = (token) => {
+  localStorage.setItem(RESET_TOKEN_KEY, token);
+};
+
+export const hasPasswordAnswerToken = () =>
+  Boolean(localStorage.getItem(ANSWER_TOKEN_KEY));
+
+export const hasPasswordResetToken = () =>
+  Boolean(localStorage.getItem(RESET_TOKEN_KEY));
+
+export const saveRecoveryAccount = ({ email, question }) => {
+  localStorage.setItem(
+    RECOVERY_ACCOUNT_KEY,
+    JSON.stringify({ email: email || null, question: question || null })
+  );
+};
+
+export const readRecoveryAccount = () => {
+  try {
+    return JSON.parse(
+      localStorage.getItem(RECOVERY_ACCOUNT_KEY) || 'null'
+    );
+  } catch {
+    return null;
+  }
+};
+
+// Called when a recovery finishes, is abandoned, or a link turns out to be
+// spent: nothing from the walk is left behind to confuse the next one.
+export const clearPasswordRecovery = () => {
+  localStorage.removeItem(ANSWER_TOKEN_KEY);
+  localStorage.removeItem(RESET_TOKEN_KEY);
+  localStorage.removeItem(RECOVERY_ACCOUNT_KEY);
 };
 
 
