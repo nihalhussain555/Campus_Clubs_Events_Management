@@ -278,7 +278,7 @@ const Login = () => {
         </form>
 
         {/* FORGOT PASSWORD */}
-        <p className="mt-5 text-center text-sm font-semibold text-slate-600">
+        <p className="mt-5 text-right text-sm font-semibold text-slate-600">
           {/* Forgot your password? */}
 
           <button
