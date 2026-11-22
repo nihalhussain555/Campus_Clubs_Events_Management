@@ -279,14 +279,15 @@ const Login = () => {
 
         {/* FORGOT PASSWORD */}
         <p className="mt-5 text-center text-sm font-semibold text-slate-600">
-          Forgot your password?
+          {/* Forgot your password? */}
 
           <button
             type="button"
             onClick={() => navigate('/forgot-password')}
             className="ml-2 font-black text-[#145f82] hover:text-black"
           >
-            Answer your security question
+            {/* Answer your security question */}
+            Forgot your password?
           </button>
         </p>
 
