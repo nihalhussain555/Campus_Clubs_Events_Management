@@ -1,13 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  GraduationCap,
-  HelpCircle,
-  Lock,
-  Mail,
-  ShieldCheck,
-  User
-} from 'lucide-react';
+import { GraduationCap, HelpCircle, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 import { authAPI } from '../services/api';
 import {
   PASSWORD_REQUIREMENT_TEXT,
