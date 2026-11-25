@@ -2,10 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GraduationCap, HelpCircle, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 import { authAPI } from '../services/api';
-import {
-  PASSWORD_REQUIREMENT_TEXT,
-  meetsPasswordPolicy
-} from '../utils/passwordPolicy';
+import { PASSWORD_REQUIREMENT_TEXT, meetsPasswordPolicy } from '../utils/passwordPolicy';
 import PasswordRules from '../components/PasswordRules';
 import Toast from '../components/Toast';
 
